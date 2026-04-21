@@ -1,8 +1,29 @@
+import html
 import uuid
 
 
 def _id():
     return str(uuid.uuid4())
+
+
+def _escape_text(value):
+    return html.escape(str(value if value is not None else ""))
+
+
+def _escape_multiline(value):
+    return _escape_text(value).replace("\n", "<br>")
+
+
+def _html_item(x, y, w, h, markup):
+    return {
+        "id": _id(),
+        "type": "html",
+        "x": int(x),
+        "y": int(y),
+        "width": int(w),
+        "height": int(h),
+        "html": markup,
+    }
 
 
 def _shape_item(x, y, w, h, fill="black", shape_type="rect"):
@@ -69,385 +90,204 @@ def _text_item(
 
 
 def build_centered_text(width, height, params):
-    text = params.get("text", "Text")
+    text = _escape_text(params.get("text", "Text"))
     return [
-        _text_item(
-            10,
-            10,
-            width - 20,
-            height - 20,
-            text,
-            size=int(min(width, height) * 0.4),
-            align="center",
-            fit=True,
+        _html_item(
+            0,
+            0,
+            width,
+            height,
+            f"""<div style="display:flex; width:100%; height:100%; align-items:center; justify-content:center; padding:4px; box-sizing:border-box;">
+  <div style="flex:1; min-width:0; min-height:0; overflow:hidden;">
+    <div class="auto-text" style="font-weight:900; text-align:center;">{text}</div>
+  </div>
+</div>""",
         )
     ]
 
 
 def build_title_subtitle(width, height, params):
-    title = params.get("title", "Title")
-    subtitle = params.get("subtitle", "Subtitle")
-
-    items = []
-    is_landscape = width > (height * 1.5)
-
-    if is_landscape:
-        title_w = width * 0.55
-        items.append(
-            _text_item(
-                10,
-                10,
-                title_w - 20,
-                height - 20,
-                title,
-                size=int(height * 0.5),
-                weight=900,
-                align="left",
-                fit=True,
-            )
+    title = _escape_text(params.get("title", "Title"))
+    subtitle = _escape_text(params.get("subtitle", "Subtitle"))
+    return [
+        _html_item(
+            0,
+            0,
+            width,
+            height,
+            f"""<div style="display:flex; flex-direction:column; width:100%; height:100%; padding:8px; gap:8px; box-sizing:border-box;">
+  <div style="flex:3; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:center;">
+    <div class="auto-text" style="font-weight:900; text-align:center; text-transform:uppercase;">{title}</div>
+  </div>
+  <div style="height:4px; background:black; width:80%; margin:0 auto; flex-shrink:0;"></div>
+  <div style="flex:2; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:center;">
+    <div class="auto-text" style="font-weight:600; text-align:center;">{subtitle}</div>
+  </div>
+</div>""",
         )
-        items.append(_shape_item(title_w, height * 0.1, 4, height * 0.8, "black"))
-        items.append(
-            _text_item(
-                title_w + 15,
-                10,
-                width - title_w - 25,
-                height - 20,
-                subtitle,
-                size=int(height * 0.25),
-                weight=400,
-                align="left",
-                fit=True,
-            )
-        )
-    else:
-        title_h = height * 0.5
-        items.append(
-            _text_item(
-                10,
-                10,
-                width - 20,
-                title_h,
-                title,
-                size=int(title_h * 0.5),
-                weight=900,
-                align="center",
-                fit=True,
-            )
-        )
-        items.append(_shape_item(width * 0.15, title_h + 5, width * 0.7, 4, "black"))
-        items.append(
-            _text_item(
-                10,
-                title_h + 15,
-                width - 20,
-                height - title_h - 25,
-                subtitle,
-                size=int(height * 0.15),
-                weight=400,
-                align="center",
-                fit=True,
-            )
-        )
-
-    return items
+    ]
 
 
 def build_price_tag(width, height, params):
-    items = []
-    has_barcode = bool(params.get("barcode", "").strip())
-    currency = params.get("currency_symbol", "$")
-    main = params.get("price_main", "19")
-    cents = params.get("price_cents", "99")
-    unit = params.get("unit", "")
-    name = params.get("product_name", "Product Name")
+    currency = _escape_text(params.get("currency_symbol", "$"))
+    main = _escape_text(params.get("price_main", "19"))
+    cents = _escape_text(params.get("price_cents", "99"))
+    unit = _escape_text(params.get("unit", ""))
+    name = _escape_text(params.get("product_name", "Product Name"))
+    barcode_data = str(params.get("barcode", "123456") or "123456")
+    has_barcode = bool(str(params.get("barcode", "") or "").strip())
 
-    full_price = f"{currency}{main}.{cents} {unit}".strip()
+    is_landscape = width > height
+    html_w = width * 0.65 if (is_landscape and has_barcode) else width
+    html_h = height * 0.65 if ((not is_landscape) and has_barcode) else height
+    unit_markup = (
+        f'<span style="font-size:0.4em; margin-left:4px;">{unit}</span>'
+        if unit
+        else ""
+    )
 
-    is_landscape = width > (height * 1.3)
-    is_micro = height <= 150
+    items = [
+        _html_item(
+            0,
+            0,
+            html_w,
+            html_h,
+            f"""<div style="display:flex; flex-direction:column; width:100%; height:100%; padding:8px; box-sizing:border-box;">
+  <div style="flex:4; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:center;">
+    <div class="auto-text" style="font-weight:900; text-align:center; display:flex; align-items:baseline; justify-content:center;">
+      <span>{currency}{main}</span>
+      <span style="font-size:0.5em; vertical-align:super;">{cents}</span>
+      {unit_markup}
+    </div>
+  </div>
+  <div style="flex:2; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:center; border-top:3px solid black; padding-top:4px;">
+    <div class="auto-text" style="font-weight:700; text-align:center; text-transform:uppercase;">{name}</div>
+  </div>
+</div>""",
+        )
+    ]
 
-    if is_landscape:
-        if is_micro:
-            price_w = width * 0.55
+    if has_barcode:
+        if is_landscape:
             items.append(
-                _text_item(
-                    10,
-                    10,
-                    price_w - 15,
-                    height - 20,
-                    full_price,
-                    size=int(height * 0.6),
-                    weight=900,
-                    align="left",
-                    fit=True,
-                    no_wrap=True,
-                )
-            )
-            items.append(
-                _text_item(
-                    price_w + 5,
-                    10,
-                    width - price_w - 15,
-                    height - 20,
-                    name,
-                    size=int(height * 0.4),
-                    weight=700,
-                    align="right",
-                    fit=True,
-                )
+                {
+                    "id": _id(),
+                    "type": "barcode",
+                    "barcode_type": "code128",
+                    "data": barcode_data,
+                    "x": int(html_w + 8),
+                    "y": 16,
+                    "width": int(width - html_w - 24),
+                    "height": int(height - 32),
+                }
             )
         else:
-            left_w = width * 0.65 if has_barcode else width
             items.append(
-                _text_item(
-                    10,
-                    10,
-                    left_w - 20,
-                    height * 0.45,
-                    full_price,
-                    size=int(height * 0.35),
-                    weight=900,
-                    align="left",
-                    fit=True,
-                    no_wrap=True,
-                )
-            )
-            items.append(_shape_item(10, height * 0.5, left_w - 20, 4, "black"))
-            items.append(
-                _text_item(
-                    10,
-                    height * 0.55,
-                    left_w - 20,
-                    height * 0.35,
-                    name,
-                    size=int(height * 0.25),
-                    weight=700,
-                    align="left",
-                    fit=True,
-                )
+                {
+                    "id": _id(),
+                    "type": "barcode",
+                    "barcode_type": "code128",
+                    "data": barcode_data,
+                    "x": 16,
+                    "y": int(html_h + 8),
+                    "width": int(width - 32),
+                    "height": int(height - html_h - 24),
+                }
             )
 
-            if has_barcode:
-                items.append(
-                    {
-                        "id": _id(),
-                        "type": "barcode",
-                        "barcode_type": "code128",
-                        "data": params.get("barcode", "123456"),
-                        "x": int(left_w),
-                        "y": int(height * 0.1),
-                        "width": int(width * 0.35 - 10),
-                        "height": int(height * 0.8),
-                    }
-                )
-    else:
-        if width <= 150:
-            items.append(
-                _text_item(
-                    10,
-                    10,
-                    width - 20,
-                    height * 0.5 - 10,
-                    full_price,
-                    size=int(width * 0.4),
-                    weight=900,
-                    align="center",
-                    fit=True,
-                    no_wrap=True,
-                )
-            )
-            items.append(
-                _text_item(
-                    10,
-                    height * 0.5,
-                    width - 20,
-                    height * 0.5 - 10,
-                    name,
-                    size=int(width * 0.3),
-                    weight=700,
-                    align="center",
-                    fit=True,
-                )
-            )
-        else:
-            price_h = height * 0.35 if has_barcode else height * 0.45
-            name_h = height * 0.2 if has_barcode else height * 0.3
-
-            items.append(
-                _text_item(
-                    10,
-                    10,
-                    width - 20,
-                    price_h,
-                    full_price,
-                    size=int(price_h * 0.8),
-                    weight=900,
-                    align="center",
-                    fit=True,
-                    no_wrap=True,
-                )
-            )
-            items.append(_shape_item(width * 0.1, price_h + 5, width * 0.8, 4, "black"))
-            items.append(
-                _text_item(
-                    10,
-                    price_h + 15,
-                    width - 20,
-                    name_h,
-                    name,
-                    size=int(name_h * 0.6),
-                    weight=700,
-                    align="center",
-                    fit=True,
-                )
-            )
-
-            if has_barcode:
-                bc_y = price_h + name_h + 20
-                bc_h = height - bc_y - 10
-                items.append(
-                    {
-                        "id": _id(),
-                        "type": "barcode",
-                        "barcode_type": "code128",
-                        "data": params.get("barcode", "123456"),
-                        "x": int(width * 0.1),
-                        "y": int(bc_y),
-                        "width": int(width * 0.8),
-                        "height": int(bc_h),
-                    }
-                )
     return items
 
 
 def build_inventory_tag(width, height, params):
-    code_type = params.get("code_type", "qrcode").lower()
-    data = params.get("code_data", "INV-001")
-    title = params.get("title", "Item Name")
-    dept = params.get("department", "WAREHOUSE")
-    sku = params.get("sku", "SKU-123")
+    code_type = str(params.get("code_type", "qrcode") or "qrcode").lower()
+    resolved_code_type = code_type if code_type in ["qrcode", "barcode"] else "qrcode"
+    data = str(params.get("code_data", "INV-001") or "INV-001")
+    title = _escape_text(params.get("title", "Item Name"))
+    dept = _escape_text(params.get("department", "WAREHOUSE"))
+    sku = _escape_text(params.get("sku", "SKU-123"))
 
-    items = []
     is_landscape = width > (height * 1.3)
+    items = []
 
     if is_landscape:
-        qr_size = min(width * 0.35, height - 20)
+        qr_size = min(width * 0.35, height - 16)
         items.append(
             {
                 "id": _id(),
-                "type": code_type if code_type in ["qrcode", "barcode"] else "qrcode",
+                "type": resolved_code_type,
                 "data": data,
-                "x": 10,
+                "x": 8,
                 "y": int((height - qr_size) / 2),
                 "width": int(qr_size),
                 "height": int(qr_size),
             }
         )
 
-        right_x = qr_size + 20
-        right_w = width - right_x - 10
-
-        dept_h = height * 0.25
+        html_x = qr_size + 16
         items.append(
-            _text_item(
-                right_x,
-                10,
-                right_w,
-                dept_h,
-                dept,
-                size=int(dept_h * 0.7),
-                weight=900,
-                invert=True,
-                align="center",
-                fit=True,
+            _html_item(
+                html_x,
+                0,
+                width - html_x,
+                height,
+                f"""<div style="display:flex; flex-direction:column; width:100%; height:100%; padding:8px; box-sizing:border-box; gap:4px;">
+  <div style="flex:1; min-width:0; min-height:0; overflow:hidden; background:black; color:white; display:flex; align-items:center; justify-content:center; border-radius:4px;">
+    <div class="auto-text" style="font-weight:900; letter-spacing:2px;">{dept}</div>
+  </div>
+  <div style="flex:2; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:flex-start;">
+    <div class="auto-text" style="font-weight:800;">{title}</div>
+  </div>
+  <div style="flex:1; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:flex-start;">
+    <div class="auto-text" style="font-weight:500; font-family:monospace;">{sku}</div>
+  </div>
+</div>""",
             )
         )
-        items.append(
-            _text_item(
-                right_x,
-                10 + dept_h + 5,
-                right_w,
-                height * 0.35,
-                title,
-                size=int(height * 0.25),
-                weight=900,
-                align="left",
-                fit=True,
-            )
-        )
-        items.append(
-            _text_item(
-                right_x,
-                height - (height * 0.25) - 10,
-                right_w,
-                height * 0.25,
-                sku,
-                size=int(height * 0.15),
-                weight=700,
-                align="left",
-                fit=True,
-            )
-        )
-
     else:
-        dept_h = height * 0.18
+        dept_h = height * 0.2
         items.append(
-            _text_item(
+            _html_item(
                 0,
                 0,
                 width,
                 dept_h,
-                dept,
-                size=int(dept_h * 0.7),
-                weight=900,
-                invert=True,
-                align="center",
-                fit=True,
+                f"""<div style="display:flex; width:100%; height:100%; background:black; color:white; align-items:center; justify-content:center; box-sizing:border-box;">
+  <div style="flex:1; min-width:0; min-height:0; overflow:hidden;">
+    <div class="auto-text" style="font-weight:900; letter-spacing:2px; text-align:center;">{dept}</div>
+  </div>
+</div>""",
             )
         )
 
-        code_size = min(width * 0.7, height * 0.45)
-        code_x = (width - code_size) / 2
-        code_y = dept_h + 10
-
+        code_size = min(width * 0.6, height * 0.4)
+        code_y = dept_h + 8
         items.append(
             {
                 "id": _id(),
-                "type": code_type if code_type in ["qrcode", "barcode"] else "qrcode",
+                "type": resolved_code_type,
                 "data": data,
-                "x": int(code_x),
+                "x": int((width - code_size) / 2),
                 "y": int(code_y),
                 "width": int(code_size),
                 "height": int(code_size),
             }
         )
 
-        text_y = code_y + code_size + 10
+        text_y = code_y + code_size + 8
         items.append(
-            _text_item(
-                10,
+            _html_item(
+                0,
                 text_y,
-                width - 20,
-                height * 0.15,
-                title,
-                size=int(height * 0.12),
-                weight=900,
-                align="center",
-                fit=True,
-            )
-        )
-        items.append(
-            _text_item(
-                10,
-                text_y + (height * 0.15),
-                width - 20,
-                height * 0.1,
-                sku,
-                size=int(height * 0.08),
-                weight=700,
-                align="center",
-                fit=True,
+                width,
+                height - text_y,
+                f"""<div style="display:flex; flex-direction:column; width:100%; height:100%; padding:4px; box-sizing:border-box; gap:4px; text-align:center;">
+  <div style="flex:2; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:center;">
+    <div class="auto-text" style="font-weight:800;">{title}</div>
+  </div>
+  <div style="flex:1; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:center;">
+    <div class="auto-text" style="font-weight:500; font-family:monospace;">{sku}</div>
+  </div>
+</div>""",
             )
         )
 
@@ -455,9 +295,15 @@ def build_inventory_tag(width, height, params):
 
 
 def build_cable_flag(width, height, params):
-    text = params.get("text", "CABLE-01")
+    text = _escape_text(params.get("text", "CABLE-01"))
     is_landscape = width > height
     items = []
+
+    html_content = f"""<div style="display:flex; width:100%; height:100%; align-items:center; justify-content:center; padding:8px; box-sizing:border-box;">
+  <div style="flex:1; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:center;">
+    <div class="auto-text" style="font-weight:900; text-align:center;">{text}</div>
+  </div>
+</div>"""
 
     if is_landscape:
         mid_x = width / 2
@@ -472,32 +318,8 @@ def build_cable_flag(width, height, params):
                 "height": int(height),
             }
         )
-        items.append(
-            _text_item(
-                10,
-                10,
-                mid_x - 20,
-                height - 20,
-                text,
-                size=int(height * 0.4),
-                align="center",
-                fit=True,
-                no_wrap=True,
-            )
-        )
-        items.append(
-            _text_item(
-                mid_x + 10,
-                10,
-                mid_x - 20,
-                height - 20,
-                text,
-                size=int(height * 0.4),
-                align="center",
-                fit=True,
-                no_wrap=True,
-            )
-        )
+        items.append(_html_item(0, 0, mid_x, height, html_content))
+        items.append(_html_item(mid_x, 0, width - mid_x, height, html_content))
     else:
         mid_y = height / 2
         items.append(
@@ -511,591 +333,373 @@ def build_cable_flag(width, height, params):
                 "height": int(height),
             }
         )
-        items.append(
-            _text_item(
-                10,
-                10,
-                width - 20,
-                mid_y - 20,
-                text,
-                size=int(width * 0.25),
-                align="center",
-                fit=True,
-                no_wrap=True,
-            )
-        )
-        items.append(
-            _text_item(
-                10,
-                mid_y + 10,
-                width - 20,
-                mid_y - 20,
-                text,
-                size=int(width * 0.25),
-                align="center",
-                fit=True,
-                no_wrap=True,
-            )
-        )
+        items.append(_html_item(0, 0, width, mid_y, html_content))
+        items.append(_html_item(0, mid_y, width, height - mid_y, html_content))
 
     return items
 
 
 def build_shipping_address(width, height, params):
-    sender = params.get("sender", "Sender Address")
-    recipient = params.get("recipient", "Recipient Address")
-    service = params.get("service", "STANDARD")
+    sender = _escape_multiline(params.get("sender", "Sender Address"))
+    recipient = _escape_multiline(params.get("recipient", "Recipient Address"))
+    service = _escape_text(params.get("service", "STANDARD"))
 
-    items = []
     is_landscape = width > height
 
     if is_landscape:
-        banner_w = width * 0.15
-        items.append(
-            _text_item(
-                0,
-                0,
-                banner_w,
-                height,
-                service,
-                size=int(banner_w * 0.5),
-                weight=900,
-                align="center",
-                invert=True,
-                fit=True,
-            )
-        )
-
-        content_x = banner_w + 10
-        content_w = width - banner_w - 20
-
-        sender_h = height * 0.25
-        items.append(
-            _text_item(
-                content_x,
-                10,
-                content_w * 0.6,
-                sender_h,
-                f"FROM:\n{sender}",
-                size=int(sender_h * 0.25),
-                weight=700,
-                align="left",
-                fit=True,
-            )
-        )
-
-        items.append(_shape_item(content_x, sender_h + 10, content_w, 4, "black"))
-
-        recip_y = sender_h + 20
-        items.append(
-            _text_item(
-                content_x,
-                recip_y,
-                100,
-                height * 0.1,
-                "SHIP TO:",
-                size=int(height * 0.08),
-                invert=True,
-                align="center",
-                no_wrap=True,
-            )
-        )
-        items.append(
-            _text_item(
-                content_x,
-                recip_y + (height * 0.1) + 10,
-                content_w,
-                height - recip_y - (height * 0.1) - 20,
-                recipient,
-                size=int(height * 0.15),
-                weight=900,
-                align="left",
-                fit=True,
-            )
-        )
+        html_markup = f"""<div style="display:flex; width:100%; height:100%; box-sizing:border-box;">
+  <div style="width:15%; background:black; color:white; display:flex; align-items:center; justify-content:center; writing-mode:vertical-rl; transform:rotate(180deg);">
+    <div class="auto-text" style="font-weight:900; letter-spacing:4px; padding:8px;">{service}</div>
+  </div>
+  <div style="flex:1; display:flex; flex-direction:column; padding:16px; gap:12px;">
+    <div style="flex:1; display:flex; flex-direction:column;">
+      <div style="font-size:12px; font-weight:700; margin-bottom:4px;">FROM:</div>
+      <div style="flex:1; min-height:0; overflow:hidden; display:flex; align-items:flex-start; justify-content:flex-start;">
+        <div class="auto-text" style="font-weight:600; text-align:left;">{sender}</div>
+      </div>
+    </div>
+    <div style="height:2px; background:black; width:100%;"></div>
+    <div style="flex:2; display:flex; flex-direction:column;">
+      <div style="display:inline-block; background:black; color:white; font-weight:900; padding:4px 8px; align-self:flex-start; margin-bottom:8px; font-size:14px;">SHIP TO:</div>
+      <div style="flex:1; min-height:0; overflow:hidden; display:flex; align-items:flex-start; justify-content:flex-start;">
+        <div class="auto-text" style="font-weight:900; text-align:left;">{recipient}</div>
+      </div>
+    </div>
+  </div>
+</div>"""
     else:
-        banner_h = height * 0.12
-        items.append(
-            _text_item(
-                0,
-                0,
-                width,
-                banner_h,
-                service,
-                size=int(banner_h * 0.6),
-                weight=900,
-                align="center",
-                invert=True,
-                fit=True,
-            )
-        )
+        html_markup = f"""<div style="display:flex; flex-direction:column; width:100%; height:100%; box-sizing:border-box;">
+  <div style="height:12%; background:black; color:white; display:flex; align-items:center; justify-content:center;">
+    <div class="auto-text" style="font-weight:900; letter-spacing:4px; padding:4px;">{service}</div>
+  </div>
+  <div style="flex:1; display:flex; flex-direction:column; padding:12px; gap:8px;">
+    <div style="flex:1; display:flex; flex-direction:column;">
+      <div style="font-size:12px; font-weight:700; margin-bottom:2px;">FROM:</div>
+      <div style="flex:1; min-height:0; overflow:hidden; display:flex; align-items:flex-start; justify-content:flex-start;">
+        <div class="auto-text" style="font-weight:600; text-align:left;">{sender}</div>
+      </div>
+    </div>
+    <div style="height:2px; background:black; width:100%;"></div>
+    <div style="flex:2; display:flex; flex-direction:column;">
+      <div style="display:inline-block; background:black; color:white; font-weight:900; padding:4px 8px; align-self:flex-start; margin-bottom:8px; font-size:14px;">SHIP TO:</div>
+      <div style="flex:1; min-height:0; overflow:hidden; display:flex; align-items:flex-start; justify-content:flex-start;">
+        <div class="auto-text" style="font-weight:900; text-align:left;">{recipient}</div>
+      </div>
+    </div>
+  </div>
+</div>"""
 
-        sender_h = height * 0.2
-        items.append(
-            _text_item(
-                10,
-                banner_h + 10,
-                width - 20,
-                sender_h,
-                f"FROM:\n{sender}",
-                size=int(sender_h * 0.2),
-                weight=700,
-                align="left",
-                fit=True,
-            )
-        )
-
-        line_y = banner_h + sender_h + 10
-        items.append(_shape_item(0, line_y, width, 4, "black"))
-
-        items.append(
-            _text_item(
-                10,
-                line_y + 10,
-                120,
-                height * 0.08,
-                "SHIP TO:",
-                size=int(height * 0.06),
-                invert=True,
-                align="center",
-                no_wrap=True,
-            )
-        )
-
-        recip_y = line_y + (height * 0.08) + 20
-        recip_h = height - recip_y - 10
-        items.append(
-            _text_item(
-                15,
-                recip_y,
-                width - 30,
-                recip_h,
-                recipient,
-                size=int(recip_h * 0.15),
-                weight=900,
-                align="left",
-                fit=True,
-            )
-        )
-
-    return items
+    return [_html_item(0, 0, width, height, html_markup)]
 
 
 def build_warning_banner(width, height, params):
-    text = params.get("text", "WARNING")
-    items = []
-    items.append(
-        _text_item(
+    text = _escape_text(params.get("text", "WARNING"))
+    return [
+        _html_item(
             0,
             0,
             width,
             height,
-            text,
-            size=int(min(width, height) * 0.6),
-            weight=900,
-            align="center",
-            invert=True,
-            fit=True,
+            f"""<div style="display:flex; width:100%; height:100%; background:black; color:white; align-items:center; justify-content:center; padding:12px; box-sizing:border-box;">
+  <div style="flex:1; min-width:0; min-height:0; overflow:hidden; border:4px solid white; display:flex; align-items:center; justify-content:center; padding:4px;">
+    <div class="auto-text" style="font-weight:900; text-align:center; text-transform:uppercase; letter-spacing:2px;">{text}</div>
+  </div>
+</div>""",
         )
-    )
-    return items
+    ]
 
 
 def build_sale_tag(width, height, params):
-    currency = params.get("currency", "$")
-    old_price = f"{currency}{params.get('old_price', '29.99')}"
-    new_price = f"{currency}{params.get('new_price', '19.99')}"
-    product = params.get("product_name", "Sale Item")
+    currency = _escape_text(params.get("currency", "$"))
+    old_price = f"{currency}{_escape_text(params.get('old_price', '29.99'))}"
+    new_price = f"{currency}{_escape_text(params.get('new_price', '19.99'))}"
+    product = _escape_text(params.get("product_name", "Sale Item"))
 
-    items = []
     is_landscape = width > height
 
     if is_landscape:
-        items.append(_text_item(10, 10, width * 0.6, height * 0.3, product, size=24, align="left"))
-        items.append(
-            _text_item(
-                10,
-                height * 0.4,
-                width * 0.4,
-                height * 0.5,
-                old_price,
-                size=32,
-                align="left",
-                underline=True,
-                color="#666666",
-            )
-        )
-        items.append(
-            _text_item(
-                width * 0.5,
-                height * 0.2,
-                width * 0.45,
-                height * 0.7,
-                new_price,
-                size=64,
-                align="center",
-                color="white",
-                bg_color="black",
-            )
-        )
+        html_markup = f"""<div style="display:flex; width:100%; height:100%; box-sizing:border-box;">
+  <div style="flex:1; padding:12px; display:flex; flex-direction:column; justify-content:center; align-items:flex-start;">
+    <div style="flex:1; min-width:0; min-height:0; overflow:hidden; width:100%; display:flex; align-items:flex-end;">
+      <div class="auto-text" style="font-weight:700;">{product}</div>
+    </div>
+    <div style="flex:1; min-width:0; min-height:0; overflow:hidden; width:100%; display:flex; align-items:flex-start; margin-top:4px;">
+      <div class="auto-text" style="font-weight:900; text-decoration:line-through; color:#666;">{old_price}</div>
+    </div>
+  </div>
+  <div style="flex:1; background:black; color:white; display:flex; align-items:center; justify-content:center; padding:16px;">
+    <div style="flex:1; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:center;">
+      <div class="auto-text" style="font-weight:900;">{new_price}</div>
+    </div>
+  </div>
+</div>"""
     else:
-        items.append(_text_item(10, 10, width - 20, height * 0.2, product, size=24, align="center"))
-        items.append(
-            _text_item(
-                10,
-                height * 0.3,
-                width - 20,
-                height * 0.2,
-                old_price,
-                size=32,
-                align="center",
-                underline=True,
-            )
-        )
-        items.append(
-            _text_item(
-                10,
-                height * 0.55,
-                width - 20,
-                height * 0.4,
-                new_price,
-                size=50,
-                align="center",
-                color="white",
-                bg_color="black",
-            )
-        )
-    return items
+        html_markup = f"""<div style="display:flex; flex-direction:column; width:100%; height:100%; box-sizing:border-box;">
+  <div style="flex:1; padding:8px; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
+    <div style="flex:1; min-width:0; min-height:0; overflow:hidden; width:100%; display:flex; align-items:flex-end; justify-content:center;">
+      <div class="auto-text" style="font-weight:700;">{product}</div>
+    </div>
+    <div style="flex:1; min-width:0; min-height:0; overflow:hidden; width:100%; display:flex; align-items:flex-start; justify-content:center; margin-top:4px;">
+      <div class="auto-text" style="font-weight:900; text-decoration:line-through; color:#666;">{old_price}</div>
+    </div>
+  </div>
+  <div style="flex:1; background:black; color:white; display:flex; align-items:center; justify-content:center; padding:12px;">
+    <div style="flex:1; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:center;">
+      <div class="auto-text" style="font-weight:900;">{new_price}</div>
+    </div>
+  </div>
+</div>"""
+
+    return [_html_item(0, 0, width, height, html_markup)]
 
 
 def build_asset_tag(width, height, params):
-    asset_id = params.get("asset_id", "AST-0001")
-    dept = params.get("department", "IT DEPT")
-    desc = params.get("description", "Laptop Computer")
+    asset_id = _escape_text(params.get("asset_id", "AST-0001"))
+    dept = _escape_text(params.get("department", "IT DEPT"))
+    desc = _escape_text(params.get("description", "Laptop Computer"))
 
-    items = []
-    header_h = height * 0.25
-    items.append(
-        _text_item(
+    is_landscape = width > height
+    header_h = height * 0.25 if is_landscape else height * 0.15
+
+    items = [
+        _html_item(
             0,
             0,
             width,
             header_h,
-            dept,
-            size=20,
-            align="center",
-            color="white",
-            bg_color="black",
+            f"""<div style="display:flex; width:100%; height:100%; background:black; color:white; align-items:center; justify-content:center;">
+  <div style="flex:1; min-width:0; min-height:0; overflow:hidden;">
+    <div class="auto-text" style="font-weight:900; letter-spacing:2px; text-align:center;">{dept}</div>
+  </div>
+</div>""",
         )
-    )
+    ]
 
-    qr_size = min(width * 0.4, height - header_h - 10)
-    items.append(
-        {
-            "id": _id(),
-            "type": "qrcode",
-            "data": asset_id,
-            "x": 10,
-            "y": int(header_h + 5),
-            "width": int(qr_size),
-            "height": int(qr_size),
-        }
-    )
+    if is_landscape:
+        qr_size = min(width * 0.35, height - header_h - 16)
+        qr_y = header_h + ((height - header_h - qr_size) / 2)
+        items.append(
+            {
+                "id": _id(),
+                "type": "qrcode",
+                "data": asset_id,
+                "x": 8,
+                "y": int(qr_y),
+                "width": int(qr_size),
+                "height": int(qr_size),
+            }
+        )
 
-    text_x = qr_size + 20
-    text_w = width - text_x - 10
-    items.append(
-        _text_item(
-            text_x,
-            header_h + 10,
-            text_w,
-            height * 0.3,
-            asset_id,
-            size=30,
-            weight=900,
-            align="left",
+        html_x = qr_size + 16
+        items.append(
+            _html_item(
+                html_x,
+                header_h,
+                width - html_x,
+                height - header_h,
+                f"""<div style="display:flex; flex-direction:column; width:100%; height:100%; padding:8px; box-sizing:border-box; gap:4px;">
+  <div style="flex:2; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:flex-end;">
+    <div class="auto-text" style="font-weight:900;">{asset_id}</div>
+  </div>
+  <div style="flex:1; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:flex-start;">
+    <div class="auto-text" style="font-weight:500; font-style:italic;">{desc}</div>
+  </div>
+</div>""",
+            )
         )
-    )
-    items.append(
-        _text_item(
-            text_x,
-            header_h + (height * 0.3) + 10,
-            text_w,
-            height * 0.3,
-            desc,
-            size=18,
-            weight=400,
-            italic=True,
-            align="left",
+    else:
+        qr_size = min(width * 0.6, height * 0.4)
+        qr_x = (width - qr_size) / 2
+        qr_y = header_h + 8
+        items.append(
+            {
+                "id": _id(),
+                "type": "qrcode",
+                "data": asset_id,
+                "x": int(qr_x),
+                "y": int(qr_y),
+                "width": int(qr_size),
+                "height": int(qr_size),
+            }
         )
-    )
+
+        text_y = qr_y + qr_size + 8
+        items.append(
+            _html_item(
+                0,
+                text_y,
+                width,
+                height - text_y,
+                f"""<div style="display:flex; flex-direction:column; width:100%; height:100%; padding:4px; box-sizing:border-box; text-align:center;">
+  <div style="flex:2; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:center;">
+    <div class="auto-text" style="font-weight:900;">{asset_id}</div>
+  </div>
+  <div style="flex:1; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:center;">
+    <div class="auto-text" style="font-weight:500; font-style:italic;">{desc}</div>
+  </div>
+</div>""",
+            )
+        )
+
     return items
 
 
 def build_spice_jar(width, height, params):
-    title = str(params.get("title", "Basil") or "Basil").strip()
-    subtitle = str(params.get("subtitle", "Sweet & Aromatic") or "").strip()
+    title = _escape_text(str(params.get("title", "Basil") or "Basil").strip())
+    subtitle = _escape_text(str(params.get("subtitle", "Sweet & Aromatic") or "").strip())
 
-    items = []
     if subtitle:
-        title_h = height * 0.55
-        sub_h = height * 0.25
-        line_thickness = max(2, int(height * 0.01))
-
-        items.append(
-            _text_item(
-                10,
-                10,
-                width - 20,
-                title_h,
-                title,
-                size=int(title_h * 0.8),
-                weight=900,
-                align="center",
-                fit=True,
-            )
-        )
-
-        line_y = 10 + title_h + (height * 0.05)
-        items.append(_shape_item(width * 0.2, line_y, width * 0.6, line_thickness, "black"))
-        items.append(
-            _text_item(
-                10,
-                line_y + line_thickness + 5,
-                width - 20,
-                sub_h,
-                subtitle,
-                size=int(sub_h * 0.6),
-                weight=400,
-                italic=True,
-                align="center",
-                fit=True,
-            )
-        )
-        items.append(
-            _shape_item(
-                width * 0.3,
-                height - max(2, int(height * 0.02)),
-                width * 0.4,
-                line_thickness,
-                "black",
-            )
-        )
+        html_markup = f"""<div style="display:flex; flex-direction:column; width:100%; height:100%; padding:12px; box-sizing:border-box; text-align:center;">
+  <div style="flex:3; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:center;">
+    <div class="auto-text" style="font-weight:900; letter-spacing:1px; text-transform:uppercase;">{title}</div>
+  </div>
+  <div style="height:2px; background:black; width:40%; margin:8px auto; flex-shrink:0;"></div>
+  <div style="flex:1; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:center;">
+    <div class="auto-text" style="font-weight:500; font-style:italic;">{subtitle}</div>
+  </div>
+  <div style="height:2px; background:black; width:20%; margin:8px auto 0 auto; flex-shrink:0;"></div>
+</div>"""
     else:
-        items.append(
-            _text_item(
-                10,
-                10,
-                width - 20,
-                height - 20,
-                title,
-                size=int(height * 0.6),
-                weight=900,
-                align="center",
-                fit=True,
-            )
-        )
+        html_markup = f"""<div style="display:flex; width:100%; height:100%; padding:12px; box-sizing:border-box; align-items:center; justify-content:center; text-align:center;">
+  <div style="flex:1; min-width:0; min-height:0; overflow:hidden; border:2px solid black; padding:8px; display:flex; align-items:center; justify-content:center; border-radius:8px;">
+    <div class="auto-text" style="font-weight:900; letter-spacing:2px; text-transform:uppercase;">{title}</div>
+  </div>
+</div>"""
 
-    return items
+    return [_html_item(0, 0, width, height, html_markup)]
 
 
 def build_icon_text(width, height, params):
-    text = params.get("text", "Label")
-    direction = params.get("direction", "row")
+    text = _escape_text(params.get("text", "Label"))
+    direction = str(params.get("direction", "row") or "row")
     icon_src = params.get("icon_src")
     if not icon_src:
         icon_src = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTIgMiAxNS4wOSA4LjI2IDIyIDkuMjcgMTcgMTQuMTQgMTguMTggMjEuMDIgMTIgMTcuNzcgNS44MiAyMS4wMiA3IDE0LjE0IDIgOS4yNyA4LjkxIDguMjYgMTIgMiI+PC9wb2x5Z29uPjwvc3ZnPg=="
 
-    if direction == "col":
-        icon_size = min(width * 0.4, height * 0.4)
-        font_size = int(height * 0.2)
-        gap = height * 0.05
-        total_h = icon_size + gap + font_size
-        start_y = (height - total_h) / 2
+    flex_dir = "row" if direction == "row" else "column"
+    align = "flex-start" if direction == "row" else "center"
+    text_align = "left" if direction == "row" else "center"
+    img_style = (
+        "height:100%; max-width:40%; object-fit:contain;"
+        if direction == "row"
+        else "width:100%; max-height:40%; object-fit:contain;"
+    )
+    escaped_icon_src = _escape_text(icon_src)
 
-        return [
-            {
-                "id": _id(),
-                "type": "icon_text",
-                "x": 10,
-                "y": 10,
-                "icon_src": icon_src,
-                "icon_x": (width - 20 - icon_size) / 2,
-                "icon_y": start_y,
-                "icon_size": int(icon_size),
-                "text": text,
-                "text_x": 0,
-                "text_y": start_y + icon_size + gap,
-                "size": font_size,
-                "weight": 700,
-                "font": "RobotoCondensed.ttf",
-                "width": width - 20,
-                "height": height - 20,
-                "align": "center",
-                "fit_to_width": True,
-            }
-        ]
+    html_markup = f"""<div style="display:flex; flex-direction:{flex_dir}; width:100%; height:100%; padding:12px; box-sizing:border-box; align-items:center; justify-content:center; gap:12px;">
+  <img src="{escaped_icon_src}" style="{img_style} flex-shrink:0;" />
+  <div style="flex:1; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:{align}; justify-content:center; width:100%;">
+    <div class="auto-text" style="font-weight:900; text-align:{text_align};">{text}</div>
+  </div>
+</div>"""
 
-    icon_size = min(width * 0.3, height - 20)
-    font_size = int(icon_size * 0.6)
-    gap = min(10, width * 0.05)
-
-    return [
-        {
-            "id": _id(),
-            "type": "icon_text",
-            "x": 10,
-            "y": 10,
-            "icon_src": icon_src,
-            "icon_x": 0,
-            "icon_y": (height - 20 - icon_size) / 2,
-            "icon_size": int(icon_size),
-            "text": text,
-            "text_x": int(icon_size + gap),
-            "text_y": (height - 20 - font_size) / 2,
-            "size": font_size,
-            "weight": 700,
-            "font": "RobotoCondensed.ttf",
-            "width": width - 20,
-            "height": height - 20,
-            "align": "left",
-            "fit_to_width": True,
-        }
-    ]
+    return [_html_item(0, 0, width, height, html_markup)]
 
 
 def build_qr_text(width, height, params):
-    text = str(params.get("text", "Scan Me") or "Scan Me").strip()
+    text = _escape_text(str(params.get("text", "Scan Me") or "Scan Me").strip())
     data = str(params.get("data", "https://catlabel.com") or "https://catlabel.com")
 
     is_landscape = width > height
     items = []
 
     if is_landscape:
-        qr_size = height - 20
+        qr_size = min(width * 0.4, height - 16)
         items.append(
             {
                 "id": _id(),
                 "type": "qrcode",
                 "data": data,
-                "x": 10,
-                "y": 10,
+                "x": 8,
+                "y": int((height - qr_size) / 2),
                 "width": int(qr_size),
                 "height": int(qr_size),
             }
         )
         items.append(
-            _text_item(
-                qr_size + 20,
-                10,
-                width - qr_size - 30,
-                height - 20,
-                text,
-                size=int(height * 0.4),
-                weight=900,
-                align="center",
-                fit=True,
+            _html_item(
+                qr_size + 16,
+                8,
+                width - qr_size - 24,
+                height - 16,
+                f"""<div style="display:flex; width:100%; height:100%; align-items:center; justify-content:center;">
+  <div style="flex:1; min-width:0; min-height:0; overflow:hidden;">
+    <div class="auto-text" style="font-weight:900; text-align:center;">{text}</div>
+  </div>
+</div>""",
             )
         )
     else:
-        qr_size = width - 20
+        qr_size = min(width - 16, height * 0.6)
+        qr_x = (width - qr_size) / 2
         items.append(
             {
                 "id": _id(),
                 "type": "qrcode",
                 "data": data,
-                "x": 10,
-                "y": 10,
+                "x": int(qr_x),
+                "y": 8,
                 "width": int(qr_size),
                 "height": int(qr_size),
             }
         )
-        text_y = qr_size + 20
-        text_h = height - qr_size - 30
+        text_y = qr_size + 16
         items.append(
-            _text_item(
-                10,
+            _html_item(
+                8,
                 text_y,
-                width - 20,
-                text_h,
-                text,
-                size=int(text_h * 0.5),
-                weight=900,
-                align="center",
-                fit=True,
+                width - 16,
+                height - text_y - 8,
+                f"""<div style="display:flex; width:100%; height:100%; align-items:center; justify-content:center;">
+  <div style="flex:1; min-width:0; min-height:0; overflow:hidden;">
+    <div class="auto-text" style="font-weight:900; text-align:center;">{text}</div>
+  </div>
+</div>""",
             )
         )
+
     return items
 
 
 def build_expiration_date(width, height, params):
-    product = str(params.get("product_name", "") or "").strip()
-    made = str(params.get("made_date", "") or "").strip()
-    exp = str(params.get("exp_date", "2025-12-31") or "2025-12-31").strip()
+    product = _escape_text(str(params.get("product_name", "") or "").strip())
+    made = _escape_text(str(params.get("made_date", "") or "").strip())
+    exp = _escape_text(str(params.get("exp_date", "2025-12-31") or "2025-12-31").strip())
 
-    items = []
-    available_h = height - 20
-    current_y = 10
-
-    parts = []
+    html_parts = []
     if product:
-        parts.append(("product", product))
+        html_parts.append(
+            f"""<div style="flex:2; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:flex-end; justify-content:center;">
+  <div class="auto-text" style="font-weight:800; text-transform:uppercase;">{product}</div>
+</div>"""
+        )
     if made:
-        parts.append(("made", f"MFG: {made}"))
+        html_parts.append(
+            f"""<div style="flex:1; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:center; margin-top:4px;">
+  <div class="auto-text" style="font-weight:500;">MFG: {made}</div>
+</div>"""
+        )
     if exp:
-        parts.append(("exp", f"EXP: {exp}"))
+        html_parts.append(
+            f"""<div style="flex:3; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:center; margin-top:4px; border:2px solid black; padding:4px; border-radius:4px;">
+  <div class="auto-text" style="font-weight:900;">EXP: {exp}</div>
+</div>"""
+        )
 
-    if not parts:
-        return items
+    if not html_parts:
+        return []
 
-    part_h = available_h / len(parts)
-
-    for part_type, text in parts:
-        if part_type == "product":
-            items.append(
-                _text_item(
-                    10,
-                    current_y,
-                    width - 20,
-                    part_h,
-                    text,
-                    size=int(part_h * 0.6),
-                    weight=700,
-                    align="center",
-                    fit=True,
-                )
-            )
-        elif part_type == "made":
-            items.append(
-                _text_item(
-                    10,
-                    current_y,
-                    width - 20,
-                    part_h,
-                    text,
-                    size=int(part_h * 0.5),
-                    weight=400,
-                    align="center",
-                    fit=True,
-                )
-            )
-        elif part_type == "exp":
-            items.append(
-                _text_item(
-                    10,
-                    current_y,
-                    width - 20,
-                    part_h,
-                    text,
-                    size=int(part_h * 0.8),
-                    weight=900,
-                    align="center",
-                    fit=True,
-                )
-            )
-        current_y += part_h
-
-    return items
+    return [
+        _html_item(
+            0,
+            0,
+            width,
+            height,
+            f"""<div style="display:flex; flex-direction:column; width:100%; height:100%; padding:12px; box-sizing:border-box; text-align:center;">
+  {''.join(html_parts)}
+</div>""",
+        )
+    ]
 
 
 TEMPLATE_REGISTRY = {
@@ -1166,7 +770,7 @@ TEMPLATE_METADATA = [
     {
         "id": "price_tag",
         "category": "Dedicated",
-        "name": "Pro Price Tag",
+        "name": "Price Tag with Barcode",
         "description": "Retail price tag. Automatically adapts to square or wide labels.",
         "fields": [
             {"name": "currency_symbol", "label": "Currency Symbol", "type": "text", "default": "$"},

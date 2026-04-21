@@ -4,10 +4,11 @@ import { calculateAutoFitItem } from '../utils/rendering';
 import {
   AlignLeft, AlignCenter, AlignRight,
   AlignStartVertical, AlignCenterVertical, AlignEndVertical,
-  Bold, Italic, Maximize, BoxSelect, WrapText, ArrowRightToLine
+  Bold, Italic, Maximize, BoxSelect, WrapText, ArrowRightToLine,
+  Trash2
 } from 'lucide-react';
 
-const ToolbarButton = ({ icon: Icon, onClick, active, title }) => (
+const ToolbarButton = ({ icon: Icon, onClick, active, title, className = '' }) => (
   <button
     onClick={(e) => {
       e.stopPropagation();
@@ -18,7 +19,7 @@ const ToolbarButton = ({ icon: Icon, onClick, active, title }) => (
       active
         ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400'
         : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-700 hover:text-neutral-900 dark:hover:text-white'
-    }`}
+    } ${className}`}
   >
     <Icon size={16} strokeWidth={2.5} />
   </button>
@@ -42,8 +43,11 @@ const HoverMenuGroup = ({ currentIcon: Icon, title, children }) => (
 
 export default function FloatingToolbar({ item, zoomScale, canvasWidth, canvasHeight, workspacePad = 0 }) {
   const updateItem = useStore((state) => state.updateItem);
+  const deleteItem = useStore((state) => state.deleteItem);
 
-  if (!item || item.type !== 'text') return null;
+  if (!item || item.type === 'cut_line_indicator') return null;
+
+  const isText = item.type === 'text';
 
   const handleFillCanvas = () => {
     let updated = {
@@ -51,16 +55,22 @@ export default function FloatingToolbar({ item, zoomScale, canvasWidth, canvasHe
       x: 0,
       y: 0,
       width: canvasWidth,
-      height: canvasHeight,
-      align: 'center',
-      verticalAlign: 'middle',
-      fit_to_width: true
+      height: canvasHeight
     };
-    updated = calculateAutoFitItem(updated, useStore.getState().batchRecords, canvasWidth, canvasHeight);
+
+    if (isText) {
+      updated.align = 'center';
+      updated.verticalAlign = 'middle';
+      updated.fit_to_width = true;
+      updated = calculateAutoFitItem(updated, useStore.getState().batchRecords, canvasWidth, canvasHeight);
+    }
+
     updateItem(item.id, updated);
   };
 
   const handleFitBox = () => {
+    if (!isText) return;
+
     let updated = { ...item, fit_to_width: !item.fit_to_width };
     if (updated.fit_to_width) {
       updated = calculateAutoFitItem(updated, useStore.getState().batchRecords, canvasWidth, canvasHeight);
@@ -85,41 +95,56 @@ export default function FloatingToolbar({ item, zoomScale, canvasWidth, canvasHe
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
-      <HoverMenuGroup currentIcon={HAlignIcon} title="Horizontal Alignment">
-        <ToolbarButton icon={AlignLeft} active={item.align === 'left'} onClick={() => updateItem(item.id, { align: 'left' })} title="Align Left" />
-        <ToolbarButton icon={AlignCenter} active={item.align === 'center' || !item.align} onClick={() => updateItem(item.id, { align: 'center' })} title="Align Center" />
-        <ToolbarButton icon={AlignRight} active={item.align === 'right'} onClick={() => updateItem(item.id, { align: 'right' })} title="Align Right" />
-      </HoverMenuGroup>
+      {isText && (
+        <>
+          <HoverMenuGroup currentIcon={HAlignIcon} title="Horizontal Alignment">
+            <ToolbarButton icon={AlignLeft} active={item.align === 'left'} onClick={() => updateItem(item.id, { align: 'left' })} title="Align Left" />
+            <ToolbarButton icon={AlignCenter} active={item.align === 'center' || !item.align} onClick={() => updateItem(item.id, { align: 'center' })} title="Align Center" />
+            <ToolbarButton icon={AlignRight} active={item.align === 'right'} onClick={() => updateItem(item.id, { align: 'right' })} title="Align Right" />
+          </HoverMenuGroup>
 
-      <HoverMenuGroup currentIcon={VAlignIcon} title="Vertical Alignment">
-        <ToolbarButton icon={AlignStartVertical} active={item.verticalAlign === 'top'} onClick={() => updateItem(item.id, { verticalAlign: 'top' })} title="Align Top" />
-        <ToolbarButton icon={AlignCenterVertical} active={item.verticalAlign === 'middle' || !item.verticalAlign} onClick={() => updateItem(item.id, { verticalAlign: 'middle' })} title="Align Middle" />
-        <ToolbarButton icon={AlignEndVertical} active={item.verticalAlign === 'bottom'} onClick={() => updateItem(item.id, { verticalAlign: 'bottom' })} title="Align Bottom" />
-      </HoverMenuGroup>
+          <HoverMenuGroup currentIcon={VAlignIcon} title="Vertical Alignment">
+            <ToolbarButton icon={AlignStartVertical} active={item.verticalAlign === 'top'} onClick={() => updateItem(item.id, { verticalAlign: 'top' })} title="Align Top" />
+            <ToolbarButton icon={AlignCenterVertical} active={item.verticalAlign === 'middle' || !item.verticalAlign} onClick={() => updateItem(item.id, { verticalAlign: 'middle' })} title="Align Middle" />
+            <ToolbarButton icon={AlignEndVertical} active={item.verticalAlign === 'bottom'} onClick={() => updateItem(item.id, { verticalAlign: 'bottom' })} title="Align Bottom" />
+          </HoverMenuGroup>
 
-      <div className="w-px h-5 bg-neutral-200 dark:bg-neutral-700 mx-1" />
+          <div className="w-px h-5 bg-neutral-200 dark:bg-neutral-700 mx-1" />
 
-      <ToolbarButton icon={Bold} active={item.weight >= 700} onClick={() => updateItem(item.id, { weight: item.weight >= 700 ? 400 : 700 })} title="Bold" />
-      <ToolbarButton icon={Italic} active={item.italic} onClick={() => updateItem(item.id, { italic: !item.italic })} title="Italic" />
-      <ToolbarButton
-        icon={item.no_wrap ? ArrowRightToLine : WrapText}
-        active={item.no_wrap}
-        onClick={() => {
-          const next = { ...item, no_wrap: !item.no_wrap };
-          updateItem(
-            item.id,
-            next.fit_to_width
-              ? calculateAutoFitItem(next, useStore.getState().batchRecords, canvasWidth, canvasHeight)
-              : next
-          );
-        }}
-        title={item.no_wrap ? 'Enable Word Wrap' : 'Force Single Line'}
-      />
+          <ToolbarButton icon={Bold} active={item.weight >= 700} onClick={() => updateItem(item.id, { weight: item.weight >= 700 ? 400 : 700 })} title="Bold" />
+          <ToolbarButton icon={Italic} active={item.italic} onClick={() => updateItem(item.id, { italic: !item.italic })} title="Italic" />
+          <ToolbarButton
+            icon={item.no_wrap ? ArrowRightToLine : WrapText}
+            active={item.no_wrap}
+            onClick={() => {
+              const next = { ...item, no_wrap: !item.no_wrap };
+              updateItem(
+                item.id,
+                next.fit_to_width
+                  ? calculateAutoFitItem(next, useStore.getState().batchRecords, canvasWidth, canvasHeight)
+                  : next
+              );
+            }}
+            title={item.no_wrap ? 'Enable Word Wrap' : 'Force Single Line'}
+          />
 
-      <div className="w-px h-5 bg-neutral-200 dark:bg-neutral-700 mx-1" />
+          <div className="w-px h-5 bg-neutral-200 dark:bg-neutral-700 mx-1" />
 
-      <ToolbarButton icon={BoxSelect} active={item.fit_to_width} onClick={handleFitBox} title="Auto-Scale Font to Fit Box" />
+          <ToolbarButton icon={BoxSelect} active={item.fit_to_width} onClick={handleFitBox} title="Auto-Scale Font to Fit Box" />
+        </>
+      )}
+
       <ToolbarButton icon={Maximize} active={false} onClick={handleFillCanvas} title="Maximize to Fill Entire Canvas" />
+
+      <div className="w-px h-5 bg-neutral-200 dark:bg-neutral-700 mx-1" />
+
+      <ToolbarButton
+        icon={Trash2}
+        active={false}
+        onClick={() => deleteItem(item.id)}
+        title="Delete Item"
+        className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/30"
+      />
     </div>
   );
 }
