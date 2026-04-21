@@ -6,6 +6,8 @@ export const TEMPLATE_MAP = {
   warning_banner: { container: 'layout-banner', text: 'text-bold-inverted', sub: null },
   price_tag: { container: 'layout-price', text: 'text-huge-price', sub: 'text-product-name' },
   address: { container: 'layout-address', text: 'text-address', sub: null },
+  jar_apothecary: { isCustom: true },
+  jar_farmhouse: { isCustom: true },
   custom: { container: 'layout-default', text: null, sub: null }
 };
 
@@ -135,6 +137,39 @@ body {
   align-items: center;
   justify-content: center;
 }
+
+/* Apothecary Style */
+.apothecary {
+  padding: 4cqmin;
+}
+.apothecary .inner {
+  border: 4px solid black;
+  height: 100%;
+  width: 100%;
+  outline: 2px solid black;
+  outline-offset: -8px;
+  display: flex;
+  flex-direction: column;
+  padding: 8cqmin;
+  text-align: center;
+}
+
+/* Farmhouse Style */
+.farmhouse {
+  display: flex;
+  flex-direction: column;
+  border: 6px solid black;
+  padding: 0 !important;
+}
+.farmhouse .stripes {
+  height: 15cqh;
+  background: repeating-linear-gradient(45deg, transparent, transparent 4px, black 4px, black 8px);
+  border-bottom: 4px solid black;
+}
+.farmhouse .stripes.bottom {
+  border-bottom: none;
+  border-top: 4px solid black;
+}
 `;
 
 const escapeHtml = (value = '') => String(value)
@@ -167,6 +202,45 @@ export const buildLabelTemplateMarkup = (record = {}) => {
       `<div style="width:100%;height:100%;">${sanitizeLabelHtml(safeRecord.custom_html || '')}</div>`,
       '</div>'
     ].join('');
+  }
+
+  if (templateId === 'jar_apothecary') {
+    return `
+      <div class="label-canvas-container apothecary">
+        <div class="inner">
+          <div style="font-size: 16cqh; letter-spacing: 4px; font-weight: 700; margin-bottom: auto;">${formatText(safeRecord.text || 'PREMIUM')}</div>
+          <div class="auto-text-wrapper" style="flex: 2; margin: 8cqmin 0;">
+            <div class="auto-text" style="font-weight: 900; text-transform: uppercase; font-family: serif;">${formatText(safeRecord.title || '')}</div>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin: 8cqmin 0;">
+            <div style="height: 2px; background: black; width: 40px;"></div>
+            <span style="font-size: 16cqh;">✧</span>
+            <div style="height: 2px; background: black; width: 40px;"></div>
+          </div>
+          <div class="auto-text-wrapper" style="flex: 1;">
+            <div class="auto-text" style="font-style: italic; font-weight: bold; font-family: serif;">${formatText(safeRecord.subtitle || '')}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if (templateId === 'jar_farmhouse') {
+    return `
+      <div class="label-canvas-container farmhouse">
+        <div class="stripes"></div>
+        <div style="flex: 1; display: flex; flex-direction: column; align-items: center; padding: 6cqmin; text-align: center;">
+          <div class="auto-text-wrapper" style="flex: 2; width: 100%;">
+            <div class="auto-text" style="font-weight: 900; text-transform: uppercase; font-style: italic; font-family: serif;">${formatText(safeRecord.title || '')}</div>
+          </div>
+          <div style="width: 100%; height: 4px; background: black; margin: 12cqmin 0;"></div>
+          <div class="auto-text-wrapper" style="width: 100%; flex: 1;">
+            <div class="auto-text" style="font-weight: bold; letter-spacing: 4px; text-transform: uppercase;">${formatText(safeRecord.subtitle || '')}</div>
+          </div>
+        </div>
+        <div class="stripes bottom"></div>
+      </div>
+    `;
   }
 
   if (templateId === 'title_subtitle' || templateId === 'price_tag') {

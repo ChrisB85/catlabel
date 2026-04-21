@@ -4,6 +4,7 @@ import {
   AlignCenter, MoveHorizontal, Maximize2, Sliders, Printer, Database, Sparkles,
   Plus, Trash2, FileSpreadsheet, Bold, Italic, Underline
 } from 'lucide-react';
+import beautify from 'js-beautify';
 import AIAssistant from './AIAssistant';
 import BatchPrintModal from './BatchPrintModal';
 import IconPicker from './IconPicker';
@@ -196,8 +197,10 @@ export default function PropertiesPanel() {
     { id: 'maximize', label: 'Maximize' },
     { id: 'title_subtitle', label: 'Title + Subtitle' },
     { id: 'warning_banner', label: 'Warning Banner' },
-    { id: 'price_tag', label: 'Price Tag' },
+    { id: 'price_tag', label: 'Price Tag with Barcode' },
     { id: 'address', label: 'Address' },
+    { id: 'jar_apothecary', label: 'Jar: Apothecary' },
+    { id: 'jar_farmhouse', label: 'Jar: Farmhouse' },
     { id: 'custom', label: 'Custom HTML' }
   ];
 
@@ -275,6 +278,18 @@ export default function PropertiesPanel() {
       return;
     }
     updateItem(selectedId, { [name]: parsedValue });
+  };
+
+  const handleFormatHtml = (target) => {
+    if (target === 'designMode') {
+      const formatted = beautify.html(htmlContent, { indent_size: 2 });
+      setHtmlContent(formatted);
+    } else if (target === 'item') {
+      const contentToFormat = selectedItem.html || selectedItem.custom_html || '';
+      const formatted = beautify.html(contentToFormat, { indent_size: 2 });
+      if (selectedItem.type === 'html') updateItem(selectedId, { html: formatted });
+      if (selectedItem.type === 'label_template') updateItem(selectedId, { custom_html: formatted });
+    }
   };
 
   const handleProfileChange = (e) => {
@@ -685,7 +700,12 @@ export default function PropertiesPanel() {
           <>
             {designMode === 'html' ? (
               <div className="space-y-4 h-full flex flex-col">
-                <h2 className="text-lg font-serif tracking-tight text-neutral-900 dark:text-white pb-2 border-b border-neutral-100 dark:border-neutral-800">HTML Editor</h2>
+                <div className="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
+                  <h2 className="text-lg font-serif tracking-tight text-neutral-900 dark:text-white">HTML Editor</h2>
+                  <button onClick={() => handleFormatHtml('designMode')} className="text-[10px] text-blue-600 bg-blue-50 px-2 py-1 rounded font-bold uppercase hover:bg-blue-100 transition-colors">
+                    Auto-Format
+                  </button>
+                </div>
                 <p className="text-[10px] text-neutral-500">
                   Wrap text in <code>&lt;div class=&quot;auto-text&quot;&gt;</code> to automatically scale it to fit the container.
                 </p>
@@ -847,8 +867,14 @@ export default function PropertiesPanel() {
                     </div>
                   </div>
 
-                  {['title_subtitle', 'price_tag'].includes(selectedItem.template_id) ? (
+                  {['title_subtitle', 'price_tag', 'jar_apothecary', 'jar_farmhouse'].includes(selectedItem.template_id) ? (
                     <>
+                      {selectedItem.template_id === 'jar_apothecary' && (
+                        <div>
+                          <label className={labelClass}>Top Text</label>
+                          <input name="text" value={selectedItem.text || ''} onChange={handleChange} className={inputClass} placeholder="PREMIUM" />
+                        </div>
+                      )}
                       <div>
                         <label className={labelClass}>Title</label>
                         <input name="title" value={selectedItem.title || ''} onChange={handleChange} className={inputClass} />
@@ -860,7 +886,10 @@ export default function PropertiesPanel() {
                     </>
                   ) : selectedItem.template_id === 'custom' ? (
                     <div>
-                      <label className={labelClass}>Custom HTML</label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className={labelClass.replace('mb-1.5', 'mb-0')}>Custom HTML</label>
+                        <button onClick={() => handleFormatHtml('item')} className="text-[9px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-bold uppercase hover:bg-blue-100 transition-colors">Format</button>
+                      </div>
                       <textarea name="custom_html" value={selectedItem.custom_html || ''} onChange={handleChange} className={inputClass} rows={10} />
                     </div>
                   ) : (
@@ -938,7 +967,10 @@ export default function PropertiesPanel() {
                     </div>
                   </div>
                   <div>
-                    <label className={labelClass}>HTML Content</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className={labelClass.replace('mb-1.5', 'mb-0')}>HTML Content</label>
+                      <button onClick={() => handleFormatHtml('item')} className="text-[9px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-bold uppercase hover:bg-blue-100 transition-colors">Format</button>
+                    </div>
                     <textarea name="html" value={selectedItem.html || ''} onChange={handleChange} className={inputClass} rows={8} />
                   </div>
                   <div className="flex gap-4">

@@ -9,6 +9,8 @@ TEMPLATE_MAP = {
     "warning_banner": {"container": "layout-banner", "text": "text-bold-inverted", "sub": None},
     "price_tag": {"container": "layout-price", "text": "text-huge-price", "sub": "text-product-name"},
     "address": {"container": "layout-address", "text": "text-address", "sub": None},
+    "jar_apothecary": {"container": None, "text": None, "sub": None},
+    "jar_farmhouse": {"container": None, "text": None, "sub": None},
     "custom": {"container": "layout-default", "text": None, "sub": None},
 }
 
@@ -138,6 +140,39 @@ body {
   align-items: center;
   justify-content: center;
 }
+
+/* Apothecary Style */
+.apothecary {
+  padding: 4cqmin;
+}
+.apothecary .inner {
+  border: 4px solid black;
+  height: 100%;
+  width: 100%;
+  outline: 2px solid black;
+  outline-offset: -8px;
+  display: flex;
+  flex-direction: column;
+  padding: 8cqmin;
+  text-align: center;
+}
+
+/* Farmhouse Style */
+.farmhouse {
+  display: flex;
+  flex-direction: column;
+  border: 6px solid black;
+  padding: 0 !important;
+}
+.farmhouse .stripes {
+  height: 15cqh;
+  background: repeating-linear-gradient(45deg, transparent, transparent 4px, black 4px, black 8px);
+  border-bottom: 4px solid black;
+}
+.farmhouse .stripes.bottom {
+  border-bottom: none;
+  border-top: 4px solid black;
+}
 """
 
 _SCRIPT_RE = re.compile(r"<script[\s\S]*?>[\s\S]*?</script>", re.IGNORECASE)
@@ -181,6 +216,43 @@ def build_label_template_markup(
         return (
             '<div class="label-canvas-container">'
             f'<div style="width:100%;height:100%;">{safe_html}</div>'
+            "</div>"
+        )
+
+    if template_id == "jar_apothecary":
+        return (
+            '<div class="label-canvas-container apothecary">'
+            '<div class="inner">'
+            f'<div style="font-size: 16cqh; letter-spacing: 4px; font-weight: 700; margin-bottom: auto;">{_format_text(text or "PREMIUM")}</div>'
+            '<div class="auto-text-wrapper" style="flex: 2; margin: 8cqmin 0;">'
+            f'<div class="auto-text" style="font-weight: 900; text-transform: uppercase; font-family: serif;">{_format_text(title)}</div>'
+            "</div>"
+            '<div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin: 8cqmin 0;">'
+            '<div style="height: 2px; background: black; width: 40px;"></div>'
+            '<span style="font-size: 16cqh;">✧</span>'
+            '<div style="height: 2px; background: black; width: 40px;"></div>'
+            "</div>"
+            '<div class="auto-text-wrapper" style="flex: 1;">'
+            f'<div class="auto-text" style="font-style: italic; font-weight: bold; font-family: serif;">{_format_text(subtitle)}</div>'
+            "</div>"
+            "</div>"
+            "</div>"
+        )
+
+    if template_id == "jar_farmhouse":
+        return (
+            '<div class="label-canvas-container farmhouse">'
+            '<div class="stripes"></div>'
+            '<div style="flex: 1; display: flex; flex-direction: column; align-items: center; padding: 6cqmin; text-align: center;">'
+            '<div class="auto-text-wrapper" style="flex: 2; width: 100%;">'
+            f'<div class="auto-text" style="font-weight: 900; text-transform: uppercase; font-style: italic; font-family: serif;">{_format_text(title)}</div>'
+            "</div>"
+            '<div style="width: 100%; height: 4px; background: black; margin: 12cqmin 0;"></div>'
+            '<div class="auto-text-wrapper" style="width: 100%; flex: 1;">'
+            f'<div class="auto-text" style="font-weight: bold; letter-spacing: 4px; text-transform: uppercase;">{_format_text(subtitle)}</div>'
+            "</div>"
+            "</div>"
+            '<div class="stripes bottom"></div>'
             "</div>"
         )
 

@@ -545,28 +545,24 @@ def build_asset_tag(width, height, params):
 
 
 def build_spice_jar(width, height, params):
-    title = _escape_text(str(params.get("title", "Basil") or "Basil").strip())
-    subtitle = _escape_text(str(params.get("subtitle", "Sweet & Aromatic") or "").strip())
+    style = str(params.get("style", "jar_apothecary") or "jar_apothecary").strip()
+    if style not in {"jar_apothecary", "jar_farmhouse"}:
+        style = "jar_apothecary"
 
-    if subtitle:
-        html_markup = f"""<div style="display:flex; flex-direction:column; width:100%; height:100%; padding:12px; box-sizing:border-box; text-align:center;">
-  <div style="flex:3; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:center;">
-    <div class="auto-text" style="font-weight:900; letter-spacing:1px; text-transform:uppercase;">{title}</div>
-  </div>
-  <div style="height:2px; background:black; width:40%; margin:8px auto; flex-shrink:0;"></div>
-  <div style="flex:1; min-width:0; min-height:0; overflow:hidden; display:flex; align-items:center; justify-content:center;">
-    <div class="auto-text" style="font-weight:500; font-style:italic;">{subtitle}</div>
-  </div>
-  <div style="height:2px; background:black; width:20%; margin:8px auto 0 auto; flex-shrink:0;"></div>
-</div>"""
-    else:
-        html_markup = f"""<div style="display:flex; width:100%; height:100%; padding:12px; box-sizing:border-box; align-items:center; justify-content:center; text-align:center;">
-  <div style="flex:1; min-width:0; min-height:0; overflow:hidden; border:2px solid black; padding:8px; display:flex; align-items:center; justify-content:center; border-radius:8px;">
-    <div class="auto-text" style="font-weight:900; letter-spacing:2px; text-transform:uppercase;">{title}</div>
-  </div>
-</div>"""
-
-    return [_html_item(0, 0, width, height, html_markup)]
+    return [
+        {
+            "id": _id(),
+            "type": "label_template",
+            "template_id": style,
+            "text": str(params.get("text", "PREMIUM") or "PREMIUM"),
+            "title": str(params.get("title", "Basil") or "Basil"),
+            "subtitle": str(params.get("subtitle", "Sweet & Aromatic") or "Sweet & Aromatic"),
+            "x": 0,
+            "y": 0,
+            "width": int(width),
+            "height": int(height),
+        }
+    ]
 
 
 def build_icon_text(width, height, params):
@@ -619,9 +615,9 @@ def build_qr_text(width, height, params):
         items.append(
             _html_item(
                 qr_size + 16,
-                8,
-                width - qr_size - 24,
-                height - 16,
+                0,
+                width - qr_size - 16,
+                height,
                 f"""<div style="display:flex; width:100%; height:100%; align-items:center; justify-content:center;">
   <div style="flex:1; min-width:0; min-height:0; overflow:hidden;">
     <div class="auto-text" style="font-weight:900; text-align:center;">{text}</div>
@@ -649,7 +645,7 @@ def build_qr_text(width, height, params):
                 8,
                 text_y,
                 width - 16,
-                height - text_y - 8,
+                height - text_y,
                 f"""<div style="display:flex; width:100%; height:100%; align-items:center; justify-content:center;">
   <div style="flex:1; min-width:0; min-height:0; overflow:hidden;">
     <div class="auto-text" style="font-weight:900; text-align:center;">{text}</div>
@@ -850,8 +846,19 @@ TEMPLATE_METADATA = [
         "name": "Pantry / Spice Jar",
         "description": "Elegant typography for home organization.",
         "fields": [
+            {
+                "name": "style",
+                "label": "Design Style",
+                "type": "select",
+                "options": [
+                    {"label": "Apothecary (Classic)", "value": "jar_apothecary"},
+                    {"label": "Farmhouse (Stripes & Clean)", "value": "jar_farmhouse"},
+                ],
+                "default": "jar_apothecary",
+            },
             {"name": "title", "label": "Main Label", "type": "text"},
             {"name": "subtitle", "label": "Subtitle / Details", "type": "text"},
+            {"name": "text", "label": "Top Text (e.g. Premium)", "type": "text", "default": "PREMIUM"},
         ],
     },
     {
