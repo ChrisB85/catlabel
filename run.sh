@@ -7,6 +7,32 @@ trap 'echo -e "\n=======================================================\nERROR:
 # 1. Explicitly set the root prefix to keep the installation portable
 export MAMBA_ROOT_PREFIX="$(pwd)/data/mamba_root"
 
+mkdir -p data
+
+hash_file() {
+    local file_path="$1"
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$file_path" | awk '{print $1}'
+    else
+        shasum -a 256 "$file_path" | awk '{print $1}'
+    fi
+}
+
+REQUIREMENTS_HASH_FILE="data/.requirements.sha256"
+FRONTEND_HASH_FILE="data/.frontend-package.sha256"
+current_requirements_hash="$(hash_file requirements.txt)"
+current_frontend_hash="$(hash_file frontend/package.json)"
+saved_requirements_hash=""
+saved_frontend_hash=""
+
+if [ -f "$REQUIREMENTS_HASH_FILE" ]; then
+    saved_requirements_hash="$(cat "$REQUIREMENTS_HASH_FILE")"
+fi
+
+if [ -f "$FRONTEND_HASH_FILE" ]; then
+    saved_frontend_hash="$(cat "$FRONTEND_HASH_FILE")"
+fi
+
 echo "=== CatLabel Bootstrapper ==="
 
 if [ ! -d "env" ]; then
@@ -66,21 +92,49 @@ if [ ! -d "env" ]; then
     
     popd > /dev/null
 
+    printf '%s' "$current_requirements_hash" > "$REQUIREMENTS_HASH_FILE"
+    printf '%s' "$current_frontend_hash" > "$FRONTEND_HASH_FILE"
+
     echo "Installation complete!"
     echo "-----------------------------------"
 else
+    needs_backend_refresh=0
+    needs_frontend_refresh=0
+
     if [ -f ".update_needed" ]; then
         echo "[*] Update detected. Refreshing dependencies and rebuilding UI..."
+        needs_backend_refresh=1
+        needs_frontend_refresh=1
+    else
+        if [ "$current_requirements_hash" != "$saved_requirements_hash" ]; then
+            echo "[*] Detected requirements.txt changes. Refreshing backend dependencies..."
+            needs_backend_refresh=1
+        fi
+
+        if [ "$current_frontend_hash" != "$saved_frontend_hash" ]; then
+            echo "[*] Detected frontend/package.json changes. Refreshing frontend dependencies..."
+            needs_frontend_refresh=1
+        fi
+    fi
+
+    if [ "$needs_backend_refresh" -eq 1 ]; then
         ./bin/micromamba run -p ./env python -m pip install -r requirements.txt
+        printf '%s' "$current_requirements_hash" > "$REQUIREMENTS_HASH_FILE"
+    fi
+
+    if [ "$needs_frontend_refresh" -eq 1 ]; then
         pushd frontend > /dev/null
         ../bin/micromamba run -p ../env npm install
         ../bin/micromamba run -p ../env npm run build
         popd > /dev/null
-        rm -f .update_needed
-    else
-        echo "[*] Fast booting. Validating requirements..."
-        ./bin/micromamba run -p ./env python -m pip install -r requirements.txt > /dev/null 2>&1 || true
+        printf '%s' "$current_frontend_hash" > "$FRONTEND_HASH_FILE"
     fi
+
+    if [ "$needs_backend_refresh" -eq 0 ] && [ "$needs_frontend_refresh" -eq 0 ]; then
+        echo "[*] Fast booting. Dependencies are up to date."
+    fi
+
+    rm -f .update_needed
 fi
 
 echo "Starting CatLabel Server (http://localhost:8000)..."

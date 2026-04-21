@@ -4,6 +4,25 @@ title CatLabel Bootstrapper
 
 set "MAMBA_ROOT_PREFIX=%cd%\data\mamba_root"
 
+if not exist "data" mkdir data
+
+set "REQ_HASH_FILE=data\.requirements.sha256"
+set "FRONTEND_HASH_FILE=data\.frontend-package.sha256"
+
+set "CURRENT_REQ_HASH="
+for /f %%i in ('powershell -NoProfile -Command "(Get-FileHash -Path ''requirements.txt'' -Algorithm SHA256).Hash.ToLower()"') do set "CURRENT_REQ_HASH=%%i"
+if errorlevel 1 goto error
+
+set "CURRENT_FRONTEND_HASH="
+for /f %%i in ('powershell -NoProfile -Command "(Get-FileHash -Path ''frontend\package.json'' -Algorithm SHA256).Hash.ToLower()"') do set "CURRENT_FRONTEND_HASH=%%i"
+if errorlevel 1 goto error
+
+set "SAVED_REQ_HASH="
+if exist "%REQ_HASH_FILE%" set /p SAVED_REQ_HASH=<"%REQ_HASH_FILE%"
+
+set "SAVED_FRONTEND_HASH="
+if exist "%FRONTEND_HASH_FILE%" set /p SAVED_FRONTEND_HASH=<"%FRONTEND_HASH_FILE%"
+
 echo === CatLabel Bootstrapper ===
 
 if not exist "env\" (
@@ -80,21 +99,57 @@ if not exist "env\" (
     
     popd
 
+    > "%REQ_HASH_FILE%" echo %CURRENT_REQ_HASH%
+    > "%FRONTEND_HASH_FILE%" echo %CURRENT_FRONTEND_HASH%
+
     echo Installation complete!
     echo -----------------------------------
 ) else (
+    set "NEEDS_BACKEND_REFRESH=0"
+    set "NEEDS_FRONTEND_REFRESH=0"
+
     if exist ".update_needed" (
         echo [*] Update detected. Refreshing dependencies and rebuilding UI...
+        set "NEEDS_BACKEND_REFRESH=1"
+        set "NEEDS_FRONTEND_REFRESH=1"
+    ) else (
+        if /I not "%CURRENT_REQ_HASH%"=="%SAVED_REQ_HASH%" (
+            echo [*] Detected requirements.txt changes. Refreshing backend dependencies...
+            set "NEEDS_BACKEND_REFRESH=1"
+        )
+        if /I not "%CURRENT_FRONTEND_HASH%"=="%SAVED_FRONTEND_HASH%" (
+            echo [*] Detected frontend\package.json changes. Refreshing frontend dependencies...
+            set "NEEDS_FRONTEND_REFRESH=1"
+        )
+    )
+
+    if "%NEEDS_BACKEND_REFRESH%"=="1" (
         bin\micromamba.exe run -p .\env python -m pip install -r requirements.txt
+        if errorlevel 1 goto error
+        > "%REQ_HASH_FILE%" echo %CURRENT_REQ_HASH%
+    )
+
+    if "%NEEDS_FRONTEND_REFRESH%"=="1" (
         pushd frontend
         ..\bin\micromamba.exe run -p ..\env npm.cmd install
+        if errorlevel 1 (
+            popd
+            goto error
+        )
         ..\bin\micromamba.exe run -p ..\env npm.cmd run build
+        if errorlevel 1 (
+            popd
+            goto error
+        )
         popd
-        del /Q .update_needed 2>nul
-    ) else (
-        echo [*] Fast booting. Validating requirements...
-        bin\micromamba.exe run -p .\env python -m pip install -r requirements.txt >nul 2>&1
+        > "%FRONTEND_HASH_FILE%" echo %CURRENT_FRONTEND_HASH%
     )
+
+    if "%NEEDS_BACKEND_REFRESH%"=="0" if "%NEEDS_FRONTEND_REFRESH%"=="0" (
+        echo [*] Fast booting. Dependencies are up to date.
+    )
+
+    if exist ".update_needed" del /Q .update_needed 2>nul
 )
 
 echo Starting CatLabel Server (http://localhost:8000)...
