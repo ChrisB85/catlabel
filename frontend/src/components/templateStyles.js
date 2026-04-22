@@ -3,18 +3,18 @@ import { applyVars } from '../utils/rendering';
 const DEFAULT_ICON_SRC = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTIgMiAxNS4wOSA4LjI2IDIyIDkuMjcgMTcgMTQuMTQgMTguMTggMjEuMDIgMTIgMTcuNzcgNS44MiAyMS4wMiA3IDE0LjE0IDIgOS4yNyA4LjkxIDguMjYgMTIgMiI+PC9wb2x5Z29uPjwvc3ZnPg==';
 
 const buildJarApothecaryMarkup = ({ text = '', title = '', subtitle = '' }) => `
-  <div class="label-canvas-container apothecary">
-    <div class="inner">
-      <div class="bound-box" style="flex: 1;"><div class="auto-text" style="letter-spacing: 4px; font-weight: 700;">${text || 'PREMIUM'}</div></div>
-      <div class="bound-box" style="flex: 2; margin: 8px 0;">
+  <div class="label-canvas-container apothecary" style="padding: 4px;">
+    <div class="inner" style="border: 3px solid black; height: 100%; width: 100%; outline: 1px solid black; outline-offset: -5px; display: flex; flex-direction: column; padding: 6px; text-align: center;">
+      <div class="bound-box" style="flex: 0.5;"><div class="auto-text" style="letter-spacing: 2px; font-weight: 700; white-space: nowrap;">${text || 'PREMIUM'}</div></div>
+      <div class="bound-box" style="flex: 2; margin: 4px 0;">
         <div class="auto-text" style="font-weight: 900; text-transform: uppercase; font-family: serif;">${title || ''}</div>
       </div>
-      <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin: 8px 0; flex: 0.5;">
-        <div style="height: 2px; background: black; width: 40px;"></div>
-        <span style="font-size: 1.2em;">✧</span>
-        <div style="height: 2px; background: black; width: 40px;"></div>
+      <div style="display: flex; align-items: center; justify-content: center; gap: 4px; margin: 2px 0; flex: 0.2; min-height: 6px;">
+        <div style="height: 1px; background: black; width: 20px;"></div>
+        <span style="font-size: 0.8em; line-height: 1;">✧</span>
+        <div style="height: 1px; background: black; width: 20px;"></div>
       </div>
-      <div class="bound-box" style="flex: 1;">
+      <div class="bound-box" style="flex: 0.8;">
         <div class="auto-text" style="font-style: italic; font-weight: bold; font-family: serif;">${subtitle || ''}</div>
       </div>
     </div>
@@ -22,18 +22,18 @@ const buildJarApothecaryMarkup = ({ text = '', title = '', subtitle = '' }) => `
 `;
 
 const buildJarFarmhouseMarkup = ({ title = '', subtitle = '' }) => `
-  <div class="label-canvas-container farmhouse">
-    <div class="stripes"></div>
-    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; padding: 4%; text-align: center;">
+  <div class="label-canvas-container farmhouse" style="display: flex; flex-direction: column; border: 4px solid black; padding: 0;">
+    <div class="stripes" style="height: 10px; background: repeating-linear-gradient(45deg, transparent, transparent 3px, black 3px, black 6px); border-bottom: 2px solid black;"></div>
+    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; padding: 4px; text-align: center; min-width: 0; min-height: 0;">
       <div class="bound-box" style="flex: 2; width: 100%;">
         <div class="auto-text" style="font-weight: 900; text-transform: uppercase; font-style: italic; font-family: serif;">${title || ''}</div>
       </div>
-      <div style="width: 100%; height: 4px; background: black; margin: 4% 0; flex-shrink: 0;"></div>
+      <div style="width: 80%; height: 2px; background: black; margin: 4px 0; flex-shrink: 0;"></div>
       <div class="bound-box" style="width: 100%; flex: 1;">
-        <div class="auto-text" style="font-weight: bold; letter-spacing: 4px; text-transform: uppercase;">${subtitle || ''}</div>
+        <div class="auto-text" style="font-weight: bold; letter-spacing: 2px; text-transform: uppercase; white-space: nowrap;">${subtitle || ''}</div>
       </div>
     </div>
-    <div class="stripes bottom"></div>
+    <div class="stripes bottom" style="height: 10px; background: repeating-linear-gradient(45deg, transparent, transparent 3px, black 3px, black 6px); border-top: 2px solid black;"></div>
   </div>
 `;
 
@@ -45,9 +45,9 @@ export const TEMPLATE_METADATA = [
     description: 'A single, perfectly auto-scaling text block.',
     fields: [{ name: 'text', label: 'Main Text', type: 'textarea', default: 'Centered Text' }],
     html: (p) => `
-      <div class="label-canvas-container" style="padding:12px;">
+      <div class="label-canvas-container" style="padding: 4px;">
         <div class="bound-box">
-          <div class="auto-text" style="font-weight:900;">${p.text || p.title || ''}</div>
+          <div class="auto-text" style="font-weight: 900;">${p.text || p.title || ''}</div>
         </div>
       </div>`,
   },
@@ -61,13 +61,13 @@ export const TEMPLATE_METADATA = [
       { name: 'subtitle', label: 'Subtitle', type: 'text', default: 'Subheading text goes here' },
     ],
     html: (p) => `
-      <div class="label-canvas-container" style="display:flex; flex-direction:column; padding:12px; gap:8px;">
-        <div class="bound-box" style="flex:3;">
-          <div class="auto-text" style="font-weight:900; text-transform:uppercase;">${p.title || ''}</div>
+      <div class="label-canvas-container" style="display: flex; flex-direction: column; padding: 4px; gap: 4px;">
+        <div class="bound-box" style="flex: 2.5;">
+          <div class="auto-text" style="font-weight: 900; text-transform: uppercase;">${p.title || ''}</div>
         </div>
-        <div style="height:4px; background:black; width:80%; margin:0 auto; flex-shrink:0;"></div>
-        <div class="bound-box" style="flex:2;">
-          <div class="auto-text" style="font-weight:700;">${p.subtitle || ''}</div>
+        <div style="height: 2px; background: black; width: 90%; margin: 0 auto; flex-shrink: 0;"></div>
+        <div class="bound-box" style="flex: 1.5;">
+          <div class="auto-text" style="font-weight: 700;">${p.subtitle || ''}</div>
         </div>
       </div>`,
   },
@@ -95,12 +95,12 @@ export const TEMPLATE_METADATA = [
       const iconSrc = p.icon_src || DEFAULT_ICON_SRC;
 
       return `
-        <div class="label-canvas-container" style="display:flex; flex-direction:${isRow ? 'row' : 'column'}; padding:12px; gap:12px; align-items:center; justify-content:center;">
-          <div style="${isRow ? 'width:40%; max-width:40%; height:100%;' : 'width:100%; height:40%; max-height:40%;'} min-width:0; min-height:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-            <img src="${iconSrc}" style="${isRow ? 'height:100%; max-width:100%;' : 'width:100%; max-height:100%;'} object-fit:contain;" />
+        <div class="label-canvas-container" style="display: flex; flex-direction: ${isRow ? 'row' : 'column'}; padding: 4px; gap: 6px; align-items: center; justify-content: center;">
+          <div style="flex: 0 0 auto; aspect-ratio: 1/1; ${isRow ? 'height: 100%;' : 'width: 100%;'} display: flex; align-items: center; justify-content: center; padding: 2px;">
+            <img src="${iconSrc}" style="width: 100%; height: 100%; object-fit: contain;" />
           </div>
-          <div class="bound-box" style="align-items:${isRow ? 'flex-start' : 'center'}; justify-content:center;">
-            <div class="auto-text" style="font-weight:900; text-align:${isRow ? 'left' : 'center'};">${p.text || ''}</div>
+          <div class="bound-box" style="flex: 1; align-items: ${isRow ? 'flex-start' : 'center'}; justify-content: center;">
+            <div class="auto-text" style="font-weight: 900; text-align: ${isRow ? 'left' : 'center'};">${p.text || ''}</div>
           </div>
         </div>`;
     },
@@ -118,26 +118,21 @@ export const TEMPLATE_METADATA = [
       const qrHtml = p.data ? `<div class="catlabel-code" data-type="qrcode" data-value="${p.data}"></div>` : '';
 
       if (!qrHtml) {
-        return `
-          <div class="label-canvas-container" style="padding:12px;">
-            <div class="bound-box">
-              <div class="auto-text" style="font-weight:900;">${p.text || ''}</div>
-            </div>
-          </div>`;
+        return `<div class="label-canvas-container" style="padding: 4px;"><div class="bound-box"><div class="auto-text" style="font-weight: 900;">${p.text || ''}</div></div></div>`;
       }
 
       if (isLandscape) {
         return `
-          <div class="label-canvas-container" style="display:flex; flex-direction:row; padding:12px; gap:12px;">
-            <div class="bound-box" style="flex:4;">${qrHtml}</div>
-            <div class="bound-box" style="flex:6;"><div class="auto-text" style="font-weight:900;">${p.text || ''}</div></div>
+          <div class="label-canvas-container" style="display: flex; flex-direction: row; padding: 4px; gap: 8px;">
+            <div style="flex: 0 0 auto; height: 100%; aspect-ratio: 1/1;">${qrHtml}</div>
+            <div class="bound-box" style="flex: 1;"><div class="auto-text" style="font-weight: 900;">${p.text || ''}</div></div>
           </div>`;
       }
 
       return `
-        <div class="label-canvas-container" style="display:flex; flex-direction:column; padding:12px; gap:12px;">
-          <div class="bound-box" style="flex:6;">${qrHtml}</div>
-          <div class="bound-box" style="flex:4;"><div class="auto-text" style="font-weight:900;">${p.text || ''}</div></div>
+        <div class="label-canvas-container" style="display: flex; flex-direction: column; padding: 4px; gap: 8px;">
+          <div style="flex: 0 0 auto; width: 100%; aspect-ratio: 1/1;">${qrHtml}</div>
+          <div class="bound-box" style="flex: 1;"><div class="auto-text" style="font-weight: 900;">${p.text || ''}</div></div>
         </div>`;
     },
   },
@@ -155,23 +150,24 @@ export const TEMPLATE_METADATA = [
       { name: 'barcode', label: 'Barcode (Leave blank to omit)', type: 'text', default: '123456789' },
     ],
     html: (p, isLandscape) => {
-      const unitHtml = p.unit ? `<span style="font-size:0.4em; margin-left:4px;">${p.unit}</span>` : '';
+      const unitHtml = p.unit ? `<span style="font-size: 0.4em; margin-left: 2px;">${p.unit}</span>` : '';
       const barcodeHtml = p.barcode ? `<div class="catlabel-code" data-type="barcode" data-format="code128" data-value="${p.barcode}"></div>` : '';
       const layout = isLandscape && barcodeHtml ? 'row' : 'column';
+      const barcodeStyle = isLandscape ? 'flex: 0 0 35%;' : 'flex: 0 0 25%;';
 
       return `
-        <div class="label-canvas-container" style="display:flex; flex-direction:${layout}; padding:12px; gap:${isLandscape ? '12px' : '8px'};">
-          <div style="flex:${barcodeHtml ? 6.5 : 1}; display:flex; flex-direction:column; min-width:0; min-height:0; gap:6px;">
-            <div class="bound-box" style="flex:4;">
-              <div class="auto-text" style="font-weight:900;">
-                <span>${p.currency_symbol || ''}${p.price_main || ''}</span><sup style="font-size:0.5em;">${p.price_cents || ''}</sup>${unitHtml}
+        <div class="label-canvas-container" style="display: flex; flex-direction: ${layout}; padding: 4px; gap: 6px;">
+          <div style="flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; gap: 2px;">
+            <div class="bound-box" style="flex: 1;">
+              <div class="auto-text" style="font-weight: 900; white-space: nowrap;">
+                ${p.currency_symbol || ''}${p.price_main || ''}<span style="font-size: 0.5em; vertical-align: top;">${p.price_cents || ''}</span>${unitHtml}
               </div>
             </div>
-            <div class="bound-box" style="flex:2; border-top:4px solid black; padding-top:6px;">
-              <div class="auto-text" style="font-weight:800; text-transform:uppercase;">${p.product_name || ''}</div>
+            <div class="bound-box" style="flex: 0.4; border-top: 2px solid black; padding-top: 2px;">
+              <div class="auto-text" style="font-weight: 800; text-transform: uppercase;">${p.product_name || ''}</div>
             </div>
           </div>
-          ${barcodeHtml ? `<div class="bound-box" style="flex:3.5;">${barcodeHtml}</div>` : ''}
+          ${barcodeHtml ? `<div class="bound-box" style="${barcodeStyle}">${barcodeHtml}</div>` : ''}
         </div>`;
     },
   },
@@ -197,38 +193,29 @@ export const TEMPLATE_METADATA = [
       { name: 'code_data', label: 'Code Data', type: 'text', default: 'INV-001' },
     ],
     html: (p, isLandscape) => {
-      const codeType = p.code_type === 'barcode' ? 'barcode' : 'qrcode';
-      const codeHtml = p.code_data ? `<div class="catlabel-code" data-type="${codeType}" data-format="code128" data-value="${p.code_data}"></div>` : '';
+      const isQR = p.code_type !== 'barcode';
+      const codeHtml = p.code_data ? `<div class="catlabel-code" data-type="${isQR ? 'qrcode' : 'barcode'}" data-format="code128" data-value="${p.code_data}"></div>` : '';
+      
+      const codeContainerStyle = isLandscape
+        ? (isQR ? `flex: 0 0 auto; height: 100%; aspect-ratio: 1/1;` : `flex: 0 0 35%;`)
+        : (isQR ? `flex: 0 0 auto; width: 100%; aspect-ratio: 1/1;` : `flex: 0 0 25%;`);
 
-      if (isLandscape) {
-        return `
-          <div class="label-canvas-container" style="display:flex; flex-direction:${codeHtml ? 'row' : 'column'}; padding:12px; gap:${codeHtml ? '12px' : '6px'}; align-items:${codeHtml ? 'center' : 'stretch'};">
-            ${codeHtml ? `<div class="bound-box" style="flex:3.5;">${codeHtml}</div>` : ''}
-            <div style="flex:6.5; min-width:0; min-height:0; display:flex; flex-direction:column; height:100%; gap:6px;">
-              <div class="bound-box" style="flex:1; background:black; color:white; border-radius:4px;">
-                <div class="auto-text" style="font-weight:900; letter-spacing:2px;">${p.department || ''}</div>
-              </div>
-              <div class="bound-box" style="flex:2; justify-content:flex-start;">
-                <div class="auto-text" style="font-weight:800; text-align:left;">${p.title || ''}</div>
-              </div>
-              <div class="bound-box" style="flex:1; justify-content:flex-start;">
-                <div class="auto-text" style="font-weight:600; font-family:monospace; text-align:left;">${p.sku || ''}</div>
-              </div>
-            </div>
-          </div>`;
-      }
+      const mainLayout = isLandscape ? 'row' : 'column';
 
       return `
-        <div class="label-canvas-container" style="display:flex; flex-direction:column; padding:8px; text-align:center; gap:6px;">
-          <div class="bound-box" style="flex:1.5; background:black; color:white; min-height:20%;">
-            <div class="auto-text" style="font-weight:900; letter-spacing:2px;">${p.department || ''}</div>
-          </div>
-          ${codeHtml ? `<div class="bound-box" style="flex:4; padding:4px;">${codeHtml}</div>` : ''}
-          <div class="bound-box" style="flex:2;">
-            <div class="auto-text" style="font-weight:800;">${p.title || ''}</div>
-          </div>
-          <div class="bound-box" style="flex:1;">
-            <div class="auto-text" style="font-weight:600; font-family:monospace;">${p.sku || ''}</div>
+        <div class="label-canvas-container" style="display: flex; flex-direction: ${mainLayout}; padding: 4px; gap: 6px;">
+          ${codeHtml && isLandscape ? `<div style="${codeContainerStyle}">${codeHtml}</div>` : ''}
+          <div style="flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 4px;">
+            <div class="bound-box" style="flex: 0 0 25%; background: black; color: white; border-radius: 2px;">
+              <div class="auto-text" style="font-weight: 900; letter-spacing: 1px; white-space: nowrap;">${p.department || ''}</div>
+            </div>
+            ${codeHtml && !isLandscape ? `<div style="${codeContainerStyle}">${codeHtml}</div>` : ''}
+            <div class="bound-box" style="flex: 1.5; justify-content: ${isLandscape ? 'flex-start' : 'center'};">
+              <div class="auto-text" style="font-weight: 800; text-align: ${isLandscape ? 'left' : 'center'};">${p.title || ''}</div>
+            </div>
+            <div class="bound-box" style="flex: 1; justify-content: ${isLandscape ? 'flex-start' : 'center'};">
+              <div class="auto-text" style="font-weight: 600; font-family: monospace; text-align: ${isLandscape ? 'left' : 'center'}; white-space: nowrap;">${p.sku || ''}</div>
+            </div>
           </div>
         </div>`;
     },
@@ -240,10 +227,10 @@ export const TEMPLATE_METADATA = [
     description: 'Fold-over tag with a dashed center line. Repeats text on both sides.',
     fields: [{ name: 'text', label: 'Cable ID / Text', type: 'text', default: 'CABLE-01' }],
     html: (p, isLandscape) => `
-      <div class="label-canvas-container" style="position:relative; display:flex; flex-direction:${isLandscape ? 'row' : 'column'}; padding:0;">
-        <div style="position:absolute; ${isLandscape ? 'top:0; bottom:0; left:50%; border-left:3px dashed black; transform:translateX(-50%);' : 'left:0; right:0; top:50%; border-top:3px dashed black; transform:translateY(-50%);'}"></div>
-        <div style="flex:1; min-width:0; min-height:0; padding:12px; display:flex;"><div class="bound-box"><div class="auto-text" style="font-weight:900;">${p.text || ''}</div></div></div>
-        <div style="flex:1; min-width:0; min-height:0; padding:12px; display:flex;"><div class="bound-box"><div class="auto-text" style="font-weight:900;">${p.text || ''}</div></div></div>
+      <div class="label-canvas-container" style="position: relative; display: flex; flex-direction: ${isLandscape ? 'row' : 'column'}; padding: 0;">
+        <div style="position: absolute; z-index: 10; ${isLandscape ? 'top: 0; bottom: 0; left: 50%; border-left: 2px dashed black; transform: translateX(-50%);' : 'left: 0; right: 0; top: 50%; border-top: 2px dashed black; transform: translateY(-50%);'}"></div>
+        <div style="flex: 1; min-width: 0; min-height: 0; padding: 4px; display: flex;"><div class="bound-box"><div class="auto-text" style="font-weight: 900;">${p.text || ''}</div></div></div>
+        <div style="flex: 1; min-width: 0; min-height: 0; padding: 4px; display: flex;"><div class="bound-box"><div class="auto-text" style="font-weight: 900;">${p.text || ''}</div></div></div>
       </div>`,
   },
   {
@@ -257,55 +244,31 @@ export const TEMPLATE_METADATA = [
       { name: 'recipient', label: 'Recipient Address', type: 'textarea', default: 'Jane Smith\n456 Recipient Ave.' },
     ],
     html: (p, isLandscape) => {
-      if (isLandscape) {
-        return `
-          <div class="label-canvas-container" style="display:flex; flex-direction:row; padding: 0;">
-            <div style="width:15%; background:black; color:white; display:flex; align-items:center; justify-content:center; writing-mode:vertical-rl; transform:rotate(180deg);">
-              <div class="bound-box" style="padding: 12px;"><div class="auto-text" style="font-weight:900; letter-spacing:4px;">${p.service || ''}</div></div>
-            </div>
-            <div style="flex:1; display:flex; flex-direction:column; padding:16px; gap:12px;">
-              <div style="flex:1; display:flex; flex-direction:column; min-width:0; min-height:0;">
-                <div class="bound-box" style="flex: 0.3; align-items:flex-end; justify-content:flex-start; margin-bottom:4px;">
-                   <div class="auto-text" style="font-weight:800; text-align:left;">FROM:</div>
-                </div>
-                <div class="bound-box" style="flex: 1; align-items:flex-start; justify-content:flex-start;">
-                  <div class="auto-text" style="font-weight:600; text-align:left;">${p.sender || ''}</div>
-                </div>
-              </div>
-              <div style="height:3px; background:black; width:100%; flex-shrink:0;"></div>
-              <div style="flex:2; display:flex; flex-direction:column; min-width:0; min-height:0;">
-                <div class="bound-box" style="flex: 0.4; align-items:flex-end; justify-content:flex-start; background:black; color:white; padding:4px 8px; align-self:flex-start; margin-bottom:8px;">
-                   <div class="auto-text" style="font-weight:900; text-align:left;">SHIP TO:</div>
-                </div>
-                <div class="bound-box" style="flex: 1.6; align-items:flex-start; justify-content:flex-start;">
-                  <div class="auto-text" style="font-weight:900; text-align:left;">${p.recipient || ''}</div>
-                </div>
-              </div>
-            </div>
-          </div>`;
-      }
+      const bannerStyle = isLandscape
+        ? `width: 12%; background: black; color: white; display: flex; align-items: center; justify-content: center; writing-mode: vertical-rl; transform: rotate(180deg);`
+        : `height: 15%; background: black; color: white; display: flex; align-items: center; justify-content: center;`;
+
+      const layoutDir = isLandscape ? 'row' : 'column';
 
       return `
-        <div class="label-canvas-container" style="display:flex; flex-direction:column; padding: 0;">
-          <div style="height:15%; background:black; color:white; display:flex; align-items:center; justify-content:center;">
-            <div class="bound-box" style="padding: 6px;"><div class="auto-text" style="font-weight:900; letter-spacing:4px;">${p.service || ''}</div></div>
+        <div class="label-canvas-container" style="display: flex; flex-direction: ${layoutDir}; padding: 0;">
+          <div style="${bannerStyle}">
+            <div class="bound-box" style="padding: 4px;">
+              <div class="auto-text" style="font-weight: 900; letter-spacing: 2px; white-space: nowrap;">${p.service || ''}</div>
+            </div>
           </div>
-          <div style="flex:1; display:flex; flex-direction:column; padding:12px; gap:8px; min-width:0; min-height:0;">
-            <div style="flex:1; display:flex; flex-direction:column; min-width:0; min-height:0;">
-              <div class="bound-box" style="flex: 0.3; align-items:flex-end; justify-content:flex-start; margin-bottom:4px;">
-                 <div class="auto-text" style="font-weight:800; text-align:left;">FROM:</div>
-              </div>
-              <div class="bound-box" style="flex: 1; align-items:flex-start; justify-content:flex-start;">
-                <div class="auto-text" style="font-weight:600; text-align:left;">${p.sender || ''}</div>
+          <div style="flex: 1; display: flex; flex-direction: column; padding: 6px; gap: 4px; min-width: 0; min-height: 0;">
+            <div style="flex: 0.8; display: flex; flex-direction: column; min-width: 0; min-height: 0;">
+              <div style="font-size: 0.5em; font-weight: 800; margin-bottom: 2px;">FROM:</div>
+              <div class="bound-box" style="flex: 1; align-items: flex-start; justify-content: flex-start;">
+                <div class="auto-text" style="font-weight: 600; text-align: left;">${p.sender || ''}</div>
               </div>
             </div>
-            <div style="height:3px; background:black; width:100%; flex-shrink:0;"></div>
-            <div style="flex:2; display:flex; flex-direction:column; min-width:0; min-height:0;">
-              <div class="bound-box" style="flex: 0.3; align-items:flex-end; justify-content:flex-start; background:black; color:white; padding:4px; align-self:flex-start; margin-bottom:4px;">
-                 <div class="auto-text" style="font-weight:900; text-align:left;">SHIP TO:</div>
-              </div>
-              <div class="bound-box" style="flex: 1; align-items:flex-start; justify-content:flex-start;">
-                <div class="auto-text" style="font-weight:900; text-align:left;">${p.recipient || ''}</div>
+            <div style="height: 2px; background: black; width: 100%; flex-shrink: 0;"></div>
+            <div style="flex: 1.2; display: flex; flex-direction: column; min-width: 0; min-height: 0;">
+              <div style="background: black; color: white; padding: 2px 4px; font-size: 0.6em; font-weight: 900; align-self: flex-start; margin-bottom: 2px;">SHIP TO:</div>
+              <div class="bound-box" style="flex: 1; align-items: flex-start; justify-content: flex-start;">
+                <div class="auto-text" style="font-weight: 900; text-align: left;">${p.recipient || ''}</div>
               </div>
             </div>
           </div>
@@ -319,9 +282,9 @@ export const TEMPLATE_METADATA = [
     description: 'Inverted black background with bold white text.',
     fields: [{ name: 'text', label: 'Warning Text', type: 'text', default: 'FRAGILE' }],
     html: (p) => `
-      <div class="label-canvas-container" style="background:black; color:white; padding:16px;">
-        <div class="bound-box" style="border:6px solid white; padding:8px;">
-          <div class="auto-text" style="font-weight:900; text-transform:uppercase; letter-spacing:4px;">${p.text || ''}</div>
+      <div class="label-canvas-container" style="background: black; color: white; padding: 4px;">
+        <div class="bound-box" style="border: 4px solid white; padding: 4px;">
+          <div class="auto-text" style="font-weight: 900; text-transform: uppercase; letter-spacing: 2px; white-space: pre-wrap;">${p.text || ''}</div>
         </div>
       </div>`,
   },
@@ -339,29 +302,29 @@ export const TEMPLATE_METADATA = [
     html: (p, isLandscape) => {
       if (isLandscape) {
         return `
-          <div class="label-canvas-container" style="display:flex; flex-direction:row;">
-            <div style="flex:1; padding:12px; display:flex; flex-direction:column; justify-content:center; align-items:flex-start;">
-              <div class="bound-box" style="flex:1; align-items:flex-end; justify-content:flex-start;">
-                <div class="auto-text" style="font-weight:700; text-align:left;">${p.product_name || ''}</div>
+          <div class="label-canvas-container" style="display: flex; flex-direction: row; padding: 0;">
+            <div style="flex: 1; padding: 6px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; min-width: 0; min-height: 0;">
+              <div class="bound-box" style="flex: 1; align-items: flex-end; justify-content: flex-start;">
+                <div class="auto-text" style="font-weight: 700; text-align: left;">${p.product_name || ''}</div>
               </div>
-              <div class="bound-box" style="flex:1; align-items:flex-start; justify-content:flex-start; margin-top:4px;">
-                <div class="auto-text" style="font-weight:900; text-decoration:line-through; color:#666; text-align:left;">${p.currency || ''}${p.old_price || ''}</div>
+              <div class="bound-box" style="flex: 1; align-items: flex-start; justify-content: flex-start; margin-top: 2px;">
+                <div class="auto-text" style="font-weight: 900; text-decoration: line-through; color: #666; text-align: left; white-space: nowrap;">${p.currency || ''}${p.old_price || ''}</div>
               </div>
             </div>
-            <div style="flex:1; background:black; color:white; display:flex; align-items:center; justify-content:center; padding:16px;">
-              <div class="bound-box"><div class="auto-text" style="font-weight:900;">${p.currency || ''}${p.new_price || ''}</div></div>
+            <div style="flex: 1.2; background: black; color: white; display: flex; align-items: center; justify-content: center; padding: 6px; min-width: 0; min-height: 0;">
+              <div class="bound-box"><div class="auto-text" style="font-weight: 900; white-space: nowrap;">${p.currency || ''}${p.new_price || ''}</div></div>
             </div>
           </div>`;
       }
 
       return `
-        <div class="label-canvas-container" style="display:flex; flex-direction:column;">
-          <div style="flex:1; padding:8px; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
-            <div class="bound-box" style="flex:1;"><div class="auto-text" style="font-weight:700;">${p.product_name || ''}</div></div>
-            <div class="bound-box" style="flex:1; margin-top:4px;"><div class="auto-text" style="font-weight:900; text-decoration:line-through; color:#666;">${p.currency || ''}${p.old_price || ''}</div></div>
+        <div class="label-canvas-container" style="display: flex; flex-direction: column; padding: 0;">
+          <div style="flex: 1; padding: 6px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; min-width: 0; min-height: 0;">
+            <div class="bound-box" style="flex: 1;"><div class="auto-text" style="font-weight: 700;">${p.product_name || ''}</div></div>
+            <div class="bound-box" style="flex: 1; margin-top: 2px;"><div class="auto-text" style="font-weight: 900; text-decoration: line-through; color: #666; white-space: nowrap;">${p.currency || ''}${p.old_price || ''}</div></div>
           </div>
-          <div style="flex:1; background:black; color:white; display:flex; align-items:center; justify-content:center; padding:12px;">
-            <div class="bound-box"><div class="auto-text" style="font-weight:900;">${p.currency || ''}${p.new_price || ''}</div></div>
+          <div style="flex: 1.2; background: black; color: white; display: flex; align-items: center; justify-content: center; padding: 6px; min-width: 0; min-height: 0;">
+            <div class="bound-box"><div class="auto-text" style="font-weight: 900; white-space: nowrap;">${p.currency || ''}${p.new_price || ''}</div></div>
           </div>
         </div>`;
     },
@@ -381,28 +344,28 @@ export const TEMPLATE_METADATA = [
 
       if (isLandscape && codeHtml) {
         return `
-          <div class="label-canvas-container" style="display:flex; flex-direction:column; padding:8px; gap:8px;">
-            <div class="bound-box" style="flex:1.4; background:black; color:white;">
-              <div class="auto-text" style="font-weight:900; letter-spacing:2px;">${p.department || ''}</div>
+          <div class="label-canvas-container" style="display: flex; flex-direction: column; padding: 4px; gap: 6px;">
+            <div class="bound-box" style="flex: 1.4; background: black; color: white; border-radius: 2px;">
+              <div class="auto-text" style="font-weight: 900; letter-spacing: 2px; white-space: nowrap;">${p.department || ''}</div>
             </div>
-            <div style="flex:4.6; min-width:0; min-height:0; display:flex; gap:8px;">
-              ${codeHtml ? `<div class="bound-box" style="flex:3.5;">${codeHtml}</div>` : ''}
-              <div style="flex:6.5; min-width:0; min-height:0; display:flex; flex-direction:column; gap:4px;">
-                <div class="bound-box" style="flex:2; justify-content:flex-start;"><div class="auto-text" style="font-weight:900; text-align:left;">${p.asset_id || ''}</div></div>
-                <div class="bound-box" style="flex:1; justify-content:flex-start;"><div class="auto-text" style="font-weight:500; font-style:italic; text-align:left;">${p.description || ''}</div></div>
+            <div style="flex: 4.6; min-width: 0; min-height: 0; display: flex; gap: 6px;">
+              <div style="flex: 0 0 auto; height: 100%; aspect-ratio: 1/1;">${codeHtml}</div>
+              <div style="flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 4px;">
+                <div class="bound-box" style="flex: 2; justify-content: flex-start;"><div class="auto-text" style="font-weight: 900; text-align: left; white-space: nowrap;">${p.asset_id || ''}</div></div>
+                <div class="bound-box" style="flex: 1.5; justify-content: flex-start;"><div class="auto-text" style="font-weight: 500; font-style: italic; text-align: left;">${p.description || ''}</div></div>
               </div>
             </div>
           </div>`;
       }
 
       return `
-        <div class="label-canvas-container" style="display:flex; flex-direction:column; padding:8px; gap:8px;">
-          <div class="bound-box" style="flex:1.2; background:black; color:white;">
-            <div class="auto-text" style="font-weight:900; letter-spacing:2px;">${p.department || ''}</div>
+        <div class="label-canvas-container" style="display: flex; flex-direction: column; padding: 4px; gap: 6px;">
+          <div class="bound-box" style="flex: 1.2; background: black; color: white; border-radius: 2px;">
+            <div class="auto-text" style="font-weight: 900; letter-spacing: 2px; white-space: nowrap;">${p.department || ''}</div>
           </div>
-          ${codeHtml ? `<div class="bound-box" style="flex:4;">${codeHtml}</div>` : ''}
-          <div class="bound-box" style="flex:2;"><div class="auto-text" style="font-weight:900;">${p.asset_id || ''}</div></div>
-          <div class="bound-box" style="flex:1;"><div class="auto-text" style="font-weight:500; font-style:italic;">${p.description || ''}</div></div>
+          ${codeHtml ? `<div style="flex: 0 0 auto; width: 100%; aspect-ratio: 1/1;">${codeHtml}</div>` : ''}
+          <div class="bound-box" style="flex: 2;"><div class="auto-text" style="font-weight: 900; white-space: nowrap;">${p.asset_id || ''}</div></div>
+          <div class="bound-box" style="flex: 1.5;"><div class="auto-text" style="font-weight: 500; font-style: italic;">${p.description || ''}</div></div>
         </div>`;
     },
   },
@@ -442,94 +405,19 @@ export const TEMPLATE_METADATA = [
       { name: 'made_date', label: 'Mfg / Made On (Optional)', type: 'text', default: '' },
     ],
     html: (p) => {
-      let html = `<div class="label-canvas-container" style="display:flex; flex-direction:column; padding:12px;">`;
-      if (p.product_name) html += `<div class="bound-box" style="flex:2;"><div class="auto-text" style="font-weight:800; text-transform:uppercase;">${p.product_name}</div></div>`;
-      if (p.made_date) html += `<div class="bound-box" style="flex:1; margin-top:4px;"><div class="auto-text" style="font-weight:600;">MFG: ${p.made_date}</div></div>`;
-      html += `<div class="bound-box" style="flex:3; margin-top:8px; border:4px solid black; padding:8px; border-radius:8px;"><div class="auto-text" style="font-weight:900;">EXP: ${p.exp_date || ''}</div></div></div>`;
+      let html = `<div class="label-canvas-container" style="display: flex; flex-direction: column; padding: 4px; gap: 4px;">`;
+      if (p.product_name) html += `<div class="bound-box" style="flex: 2;"><div class="auto-text" style="font-weight: 800; text-transform: uppercase;">${p.product_name}</div></div>`;
+      if (p.made_date) html += `<div class="bound-box" style="flex: 1;"><div class="auto-text" style="font-weight: 600; white-space: nowrap;">MFG: ${p.made_date}</div></div>`;
+      html += `<div class="bound-box" style="flex: 3; border: 3px solid black; padding: 4px; border-radius: 4px;"><div class="auto-text" style="font-weight: 900; white-space: nowrap;">EXP: ${p.exp_date || ''}</div></div></div>`;
       return html;
     },
-  },
-  {
-    id: 'default',
-    category: 'Legacy',
-    name: 'Default',
-    description: 'Legacy plain text layout.',
-    fields: [{ name: 'text', label: 'Main Text', type: 'textarea', default: 'Label Text' }],
-    html: (p) => `
-      <div class="label-canvas-container" style="display:flex; align-items:flex-start; justify-content:flex-start; padding:12px;">
-        <div class="bound-box" style="align-items:flex-start; justify-content:flex-start;">
-          <div class="auto-text" style="font-weight:700; text-align:left;">${p.text || ''}</div>
-        </div>
-      </div>`,
-  },
-  {
-    id: 'center',
-    category: 'Legacy',
-    name: 'Center',
-    description: 'Legacy centered text layout.',
-    fields: [{ name: 'text', label: 'Main Text', type: 'textarea', default: 'Centered Text' }],
-    html: (p) => `
-      <div class="label-canvas-container" style="display:flex; align-items:center; justify-content:center; padding:12px;">
-        <div class="bound-box">
-          <div class="auto-text" style="font-weight:700;">${p.text || ''}</div>
-        </div>
-      </div>`,
-  },
-  {
-    id: 'maximize',
-    category: 'Legacy',
-    name: 'Maximize',
-    description: 'Legacy maximized text layout.',
-    fields: [{ name: 'text', label: 'Main Text', type: 'textarea', default: 'BIG TEXT' }],
-    html: (p) => `
-      <div class="label-canvas-container" style="display:flex; align-items:center; justify-content:center; padding:12px;">
-        <div class="bound-box">
-          <div class="auto-text" style="font-weight:900;">${p.text || ''}</div>
-        </div>
-      </div>`,
-  },
-  {
-    id: 'address',
-    category: 'Legacy',
-    name: 'Address',
-    description: 'Legacy address block layout.',
-    fields: [{ name: 'text', label: 'Address Text', type: 'textarea', default: '123 Example St.\nCity, ST 12345' }],
-    html: (p) => `
-      <div class="label-canvas-container" style="display:flex; flex-direction:column; justify-content:center; align-items:flex-start; text-align:left; padding:12px;">
-        <div class="bound-box" style="align-items:flex-start; justify-content:flex-start;">
-          <div class="auto-text" style="font-weight:700; text-align:left;">${p.text || ''}</div>
-        </div>
-      </div>`,
-  },
-  {
-    id: 'jar_apothecary',
-    category: 'Legacy',
-    name: 'Jar: Apothecary',
-    description: 'Classic apothecary pantry style.',
-    fields: [
-      { name: 'text', label: 'Top Text', type: 'text', default: 'PREMIUM' },
-      { name: 'title', label: 'Title', type: 'text', default: 'BASIL' },
-      { name: 'subtitle', label: 'Subtitle', type: 'text', default: 'Sweet & Aromatic' },
-    ],
-    html: (p) => buildJarApothecaryMarkup(p),
-  },
-  {
-    id: 'jar_farmhouse',
-    category: 'Legacy',
-    name: 'Jar: Farmhouse',
-    description: 'Farmhouse pantry label style.',
-    fields: [
-      { name: 'title', label: 'Title', type: 'text', default: 'BASIL' },
-      { name: 'subtitle', label: 'Subtitle', type: 'text', default: 'Sweet & Aromatic' },
-    ],
-    html: (p) => buildJarFarmhouseMarkup(p),
   },
   {
     id: 'custom',
     category: 'Layout',
     name: 'Custom HTML',
     description: 'Raw HTML entry.',
-    fields: [{ name: 'custom_html', label: 'HTML Content', type: 'textarea', default: '<div>Hello</div>' }],
+    fields: [{ name: 'custom_html', label: 'HTML Content', type: 'textarea', default: '<div class="bound-box"><div class="auto-text">Hello</div></div>' }],
     html: (p) => `<div class="label-canvas-container">${p.custom_html || ''}</div>`,
   },
 ];
