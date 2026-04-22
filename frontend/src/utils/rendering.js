@@ -83,22 +83,28 @@ export const processHtmlDynamicElements = async (container, width, height, isCan
   // THREE-PASS AUTO-SCALING PIPELINE
   // =========================================================================
 
-  // Force a complete DOM reflow so the browser calculates flex layouts perfectly
-  // before we attempt to read any bounding boxes.
+  // Force a DOM reflow to ensure all flex layouts are settled
   container.offsetHeight;
 
   const boxes = Array.from(container.querySelectorAll('.bound-box'));
 
-  // PASS 1: READ
+  // PASS 1: READ (Using offsetWidth/Height to bypass UI zoom scaling)
   const boxMetrics = boxes.map((box) => {
-    const rect = box.getBoundingClientRect();
     const style = window.getComputedStyle(box);
+    const px = (val) => parseFloat(val) || 0;
+
+    const outerW = box.offsetWidth;
+    const outerH = box.offsetHeight;
+
+    // Calculate inner space by subtracting padding and borders
+    const innerW = outerW - px(style.paddingLeft) - px(style.paddingRight) - px(style.borderLeftWidth) - px(style.borderRightWidth);
+    const innerH = outerH - px(style.paddingTop) - px(style.paddingBottom) - px(style.borderTopWidth) - px(style.borderBottomWidth);
 
     return {
-      outerW: Math.max(1, rect.width),
-      outerH: Math.max(1, rect.height),
-      innerW: Math.max(1, rect.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)),
-      innerH: Math.max(1, rect.height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom))
+      outerW: Math.max(1, outerW),
+      outerH: Math.max(1, outerH),
+      innerW: Math.max(1, innerW),
+      innerH: Math.max(1, innerH)
     };
   });
 
@@ -126,7 +132,10 @@ export const processHtmlDynamicElements = async (container, width, height, isCan
     const targetW = boxMetrics[pIndex].innerW;
     const targetH = boxMetrics[pIndex].innerH;
 
-    el.style.width = '100%';
+    // Reset styles for true content-based measurement
+    el.style.display = 'inline-block';
+    el.style.width = 'auto';
+    el.style.maxWidth = `${targetW}px`;
     el.style.height = 'auto';
 
     let low = 1;
@@ -137,11 +146,9 @@ export const processHtmlDynamicElements = async (container, width, height, isCan
       const mid = (low + high) / 2;
       el.style.fontSize = `${mid}px`;
 
-      const rect = el.getBoundingClientRect();
-
-      // Use Math.ceil to prevent fractional pixel differences from causing premature shrinking
+      // Check actual text footprint vs target inner boundaries
       const overflowsH = Math.ceil(el.scrollWidth) > targetW + 1;
-      const overflowsV = Math.ceil(rect.height) > targetH + 1;
+      const overflowsV = Math.ceil(el.scrollHeight) > targetH + 1;
 
       if (overflowsH || overflowsV) {
         high = mid - 0.5;
