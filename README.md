@@ -15,7 +15,7 @@ The project uses the protocol implementations and rendering logic from the origi
 *   **Visual Canvas:** A WYSIWYG editor for placing text, barcodes, QR codes, and images on a label.
 *   **Precision Controls:** Adjust element coordinates and dimensions using millimeter-based "scrubber" inputs for exact alignment.
 *   **Icon Library:** Integrated searchable access to the Lucide icon library, with automatic rasterization for thermal print heads.
-*   **Custom HTML/CSS:** An advanced mode to design labels using raw HTML and CSS for complex or pixel-perfect layouts.
+*   **Custom HTML/CSS:** An advanced mode to design labels using raw HTML and CSS. Features a custom **3-Pass Auto-Scaling Engine** that guarantees text and barcodes perfectly maximize their container bounds without manual font-size tweaking.
 *   **Undo/Redo:** Full history tracking for canvas modifications.
 *   **Grouping & Arranging:** Group elements for collective movement and manage the Z-order (stacking) of layers.
 
@@ -42,11 +42,15 @@ CatLabel supports a flexible variable system using the `{{ variable_name }}` syn
 
 ### Variable Usage:
 *   **Standard Text:** Type `{{ price }}` or `{{ name }}` into any text element.
-*   **HTML/CSS Mode:** Use variables directly in your markup, for example:
+*   **HTML/CSS Mode:** Use variables directly in your markup, wrapping them in our auto-scaling classes:
     ```html
-    <div class="auto-text">
-      <h1>{{ product_name }}</h1>
-      <p>SKU: {{ sku_code }}</p>
+    <div style="display: flex; flex-direction: column; height: 100%; padding: 4px; gap: 4px;">
+      <div class="bound-box" style="flex: 2;">
+        <div class="auto-text" style="font-weight: 900;">{{ product_name }}</div>
+      </div>
+      <div class="bound-box" style="flex: 1;">
+        <div class="catlabel-code" data-type="barcode" data-format="code128" data-value="{{ sku_code }}"></div>
+      </div>
     </div>
     ```
 *   **Variable Combinations:** Use multiple variables in a single string, like `Model: {{ model }} / ID: {{ id }}`.

@@ -185,16 +185,27 @@ Ensures perfect alignment between a leading icon and trailing text.
 }
 ```
 
-**5. HTML Mode / `.auto-text` Helper**
+**5. HTML Mode / `.auto-text` & `.bound-box` Helpers**
 If `designMode` is `"html"`, elements inside `items` are ignored. Instead, the renderer evaluates `htmlContent`.
-To automatically scale text to fit an HTML container, wrap it in `<div class="auto-text">`.
+CatLabel uses a custom 3-Pass Rendering Pipeline to guarantee text auto-scales perfectly and barcodes render sharply. You MUST follow this exact DOM structure:
+
+1. Create your layout container (e.g., a standard flexbox).
+2. Wrap every auto-scaling text or dynamic barcode element in a `<div class="bound-box">`. You assign your structural `flex` sizing to *this* box.
+3. Inside `.bound-box`, place `<div class="auto-text">` for text, or `<div class="catlabel-code">` for barcodes.
+
 ```json
 {
   "designMode": "html",
-  "htmlContent": "<div style='display:flex; width:100%; height:100%;'><div style='flex:1; min-width:0; min-height:0; overflow:hidden;'><div class='auto-text'><h1>{{ title }}</h1><p>{{ subtitle }}</p></div></div></div>"
+  "htmlContent": "<div style='display: flex; gap: 4px; padding: 4px; height: 100%;'><div class='bound-box' style='flex: 6;'><div class='auto-text' style='white-space: nowrap; font-weight: 900;'>{{ title }}</div></div><div class='bound-box' style='flex: 4;'><div class='catlabel-code' data-type='qrcode' data-value='{{ url }}'></div></div></div>"
 }
 ```
-*Agent Rule: You MUST set strict boundaries (e.g. `overflow: hidden; min-width: 0; min-height: 0;` inside flexbox/grid cells) on the parent of `.auto-text` for the auto-sizing logic to measure properly. NEVER apply `font-size` directly to `.auto-text`.*
+
+*Agent Rules for HTML Mode:*
+*   **The `.bound-box` Wrapper:** You MUST wrap `.auto-text` and `.catlabel-code` elements in `.bound-box`. The engine locks this box to absolute pixels during rendering to prevent flexbox collapse.
+*   **Text Sizing:** NEVER apply `font-size` directly to `.auto-text` or its children. The engine calculates the maximum safe font size automatically.
+*   **Single-Line Text:** To force text to shrink onto a single line without wrapping, add `style="white-space: nowrap;"` to the `.auto-text` div.
+*   **Padding:** Thermal labels are physically tiny. Keep layout padding extremely minimal (0px to 4px maximum).
+*   **Dynamic Codes:** Use `<div class="catlabel-code" data-type="qrcode|barcode" data-format="code128" data-value="{{ var }}"></div>`. Do not use `<img>` tags for dynamic barcodes.
 
 ---
 
