@@ -67,7 +67,7 @@ export const processHtmlDynamicElements = async (container, width, height, isCan
 
   if (isCancelled && isCancelled()) return;
 
-  // 2. Wait for all images to load
+  // 2. Wait for all injected images to load
   const imgEls = Array.from(container.querySelectorAll('img'));
   await Promise.all(imgEls.map((img) => {
     if (img.complete) return Promise.resolve();
@@ -83,31 +83,26 @@ export const processHtmlDynamicElements = async (container, width, height, isCan
   // THREE-PASS AUTO-SCALING PIPELINE
   // =========================================================================
 
+  // Force a complete DOM reflow so the browser calculates flex layouts perfectly
+  // before we attempt to read any bounding boxes.
+  container.offsetHeight;
+
   const boxes = Array.from(container.querySelectorAll('.bound-box'));
 
   // PASS 1: READ
-  // We read the layout while the browser's CSS flexbox calculates the perfect
-  // proportions. We record exact pixel measurements.
   const boxMetrics = boxes.map((box) => {
     const rect = box.getBoundingClientRect();
     const style = window.getComputedStyle(box);
-    const paddingLeft = parseFloat(style.paddingLeft) || 0;
-    const paddingRight = parseFloat(style.paddingRight) || 0;
-    const paddingTop = parseFloat(style.paddingTop) || 0;
-    const paddingBottom = parseFloat(style.paddingBottom) || 0;
 
     return {
-      outerW: rect.width,
-      outerH: rect.height,
-      innerW: box.clientWidth - paddingLeft - paddingRight,
-      innerH: box.clientHeight - paddingTop - paddingBottom
+      outerW: Math.max(1, rect.width),
+      outerH: Math.max(1, rect.height),
+      innerW: Math.max(1, rect.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)),
+      innerH: Math.max(1, rect.height - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom))
     };
   });
 
   // PASS 2: LOCK (WRITE)
-  // We force the flex boxes to absolute pixel dimensions and turn off flex scaling.
-  // This guarantees that when text grows later, it hits a hard wall instead of
-  // stretching the container and causing cascading layout reflows.
   boxes.forEach((box, i) => {
     box.style.width = `${boxMetrics[i].outerW}px`;
     box.style.height = `${boxMetrics[i].outerH}px`;
@@ -121,7 +116,6 @@ export const processHtmlDynamicElements = async (container, width, height, isCan
   if (isCancelled && isCancelled()) return;
 
   // PASS 3: BINARY SCALE
-  // Safely scale text into its locked parent container.
   const autoTexts = Array.from(container.querySelectorAll('.auto-text'));
 
   autoTexts.forEach((el) => {
@@ -129,17 +123,14 @@ export const processHtmlDynamicElements = async (container, width, height, isCan
     if (!parentBox) return;
 
     const pIndex = boxes.indexOf(parentBox);
-    if (pIndex < 0) return;
-
     const targetW = boxMetrics[pIndex].innerW;
     const targetH = boxMetrics[pIndex].innerH;
 
-    // Reset styles for safe measurement
     el.style.width = '100%';
     el.style.height = 'auto';
 
     let low = 1;
-    let high = 800;
+    let high = 500;
     let best = 1;
 
     while (high - low >= 0.5) {
@@ -148,9 +139,9 @@ export const processHtmlDynamicElements = async (container, width, height, isCan
 
       const rect = el.getBoundingClientRect();
 
-      // scrollWidth captures text that refuses to wrap (e.g. single long word, or nowrap)
-      const overflowsH = el.scrollWidth > targetW + 1;
-      const overflowsV = rect.height > targetH + 1;
+      // Use Math.ceil to prevent fractional pixel differences from causing premature shrinking
+      const overflowsH = Math.ceil(el.scrollWidth) > targetW + 1;
+      const overflowsV = Math.ceil(rect.height) > targetH + 1;
 
       if (overflowsH || overflowsV) {
         high = mid - 0.5;
@@ -160,7 +151,6 @@ export const processHtmlDynamicElements = async (container, width, height, isCan
       }
     }
 
-    // Apply the winning size, rounded safely
     el.style.fontSize = `${Math.floor(best * 10) / 10}px`;
   });
 };

@@ -129,14 +129,14 @@ export const TEMPLATE_METADATA = [
       if (isLandscape) {
         return `
           <div class="label-canvas-container" style="display:flex; flex-direction:row; padding:12px; gap:12px;">
-            <div style="flex:4; min-width:0; min-height:0; display:flex; align-items:center; justify-content:center;">${qrHtml}</div>
+            <div class="bound-box" style="flex:4;">${qrHtml}</div>
             <div class="bound-box" style="flex:6;"><div class="auto-text" style="font-weight:900;">${p.text || ''}</div></div>
           </div>`;
       }
 
       return `
         <div class="label-canvas-container" style="display:flex; flex-direction:column; padding:12px; gap:12px;">
-          <div style="flex:6; min-width:0; min-height:0; display:flex; align-items:center; justify-content:center;">${qrHtml}</div>
+          <div class="bound-box" style="flex:6;">${qrHtml}</div>
           <div class="bound-box" style="flex:4;"><div class="auto-text" style="font-weight:900;">${p.text || ''}</div></div>
         </div>`;
     },
@@ -161,19 +161,17 @@ export const TEMPLATE_METADATA = [
 
       return `
         <div class="label-canvas-container" style="display:flex; flex-direction:${layout}; padding:12px; gap:${isLandscape ? '12px' : '8px'};">
-          <div style="flex:${barcodeHtml ? 6.5 : 1}; display:flex; flex-direction:column; min-width:0; min-height:0;">
+          <div style="flex:${barcodeHtml ? 6.5 : 1}; display:flex; flex-direction:column; min-width:0; min-height:0; gap:6px;">
             <div class="bound-box" style="flex:4;">
-              <div class="auto-text" style="font-weight:900; display:flex; flex-direction:row; align-items:baseline;">
-                <span>${p.currency_symbol || ''}${p.price_main || ''}</span>
-                <span style="font-size:0.5em; vertical-align:super;">${p.price_cents || ''}</span>
-                ${unitHtml}
+              <div class="auto-text" style="font-weight:900;">
+                <span>${p.currency_symbol || ''}${p.price_main || ''}</span><sup style="font-size:0.5em;">${p.price_cents || ''}</sup>${unitHtml}
               </div>
             </div>
-            <div class="bound-box" style="flex:2; border-top:4px solid black; padding-top:6px; margin-top:6px;">
+            <div class="bound-box" style="flex:2; border-top:4px solid black; padding-top:6px;">
               <div class="auto-text" style="font-weight:800; text-transform:uppercase;">${p.product_name || ''}</div>
             </div>
           </div>
-          ${barcodeHtml ? `<div style="flex:3.5; min-width:0; min-height:0; display:flex; align-items:center; justify-content:center;">${barcodeHtml}</div>` : ''}
+          ${barcodeHtml ? `<div class="bound-box" style="flex:3.5;">${barcodeHtml}</div>` : ''}
         </div>`;
     },
   },
@@ -205,7 +203,7 @@ export const TEMPLATE_METADATA = [
       if (isLandscape) {
         return `
           <div class="label-canvas-container" style="display:flex; flex-direction:${codeHtml ? 'row' : 'column'}; padding:12px; gap:${codeHtml ? '12px' : '6px'}; align-items:${codeHtml ? 'center' : 'stretch'};">
-            ${codeHtml ? `<div style="flex:3.5; min-width:0; min-height:0; display:flex; align-items:center; justify-content:center; height:100%;">${codeHtml}</div>` : ''}
+            ${codeHtml ? `<div class="bound-box" style="flex:3.5;">${codeHtml}</div>` : ''}
             <div style="flex:6.5; min-width:0; min-height:0; display:flex; flex-direction:column; height:100%; gap:6px;">
               <div class="bound-box" style="flex:1; background:black; color:white; border-radius:4px;">
                 <div class="auto-text" style="font-weight:900; letter-spacing:2px;">${p.department || ''}</div>
@@ -225,9 +223,9 @@ export const TEMPLATE_METADATA = [
           <div class="bound-box" style="flex:1.5; background:black; color:white; min-height:20%;">
             <div class="auto-text" style="font-weight:900; letter-spacing:2px;">${p.department || ''}</div>
           </div>
-          ${codeHtml ? `<div style="flex:4; min-width:0; min-height:0; display:flex; align-items:center; justify-content:center; padding:4px;">${codeHtml}</div>` : ''}
+          ${codeHtml ? `<div class="bound-box" style="flex:4; padding:4px;">${codeHtml}</div>` : ''}
           <div class="bound-box" style="flex:2;">
-            <div class="auto-text" style="font-weight:800; line-height:1;">${p.title || ''}</div>
+            <div class="auto-text" style="font-weight:800;">${p.title || ''}</div>
           </div>
           <div class="bound-box" style="flex:1;">
             <div class="auto-text" style="font-weight:600; font-family:monospace;">${p.sku || ''}</div>
@@ -388,7 +386,7 @@ export const TEMPLATE_METADATA = [
               <div class="auto-text" style="font-weight:900; letter-spacing:2px;">${p.department || ''}</div>
             </div>
             <div style="flex:4.6; min-width:0; min-height:0; display:flex; gap:8px;">
-              <div style="flex:3.5; min-width:0; min-height:0; display:flex; align-items:center; justify-content:center;">${codeHtml}</div>
+              ${codeHtml ? `<div class="bound-box" style="flex:3.5;">${codeHtml}</div>` : ''}
               <div style="flex:6.5; min-width:0; min-height:0; display:flex; flex-direction:column; gap:4px;">
                 <div class="bound-box" style="flex:2; justify-content:flex-start;"><div class="auto-text" style="font-weight:900; text-align:left;">${p.asset_id || ''}</div></div>
                 <div class="bound-box" style="flex:1; justify-content:flex-start;"><div class="auto-text" style="font-weight:500; font-style:italic; text-align:left;">${p.description || ''}</div></div>
@@ -402,7 +400,7 @@ export const TEMPLATE_METADATA = [
           <div class="bound-box" style="flex:1.2; background:black; color:white;">
             <div class="auto-text" style="font-weight:900; letter-spacing:2px;">${p.department || ''}</div>
           </div>
-          ${codeHtml ? `<div style="flex:4; min-width:0; min-height:0; display:flex; align-items:center; justify-content:center;">${codeHtml}</div>` : ''}
+          ${codeHtml ? `<div class="bound-box" style="flex:4;">${codeHtml}</div>` : ''}
           <div class="bound-box" style="flex:2;"><div class="auto-text" style="font-weight:900;">${p.asset_id || ''}</div></div>
           <div class="bound-box" style="flex:1;"><div class="auto-text" style="font-weight:500; font-style:italic;">${p.description || ''}</div></div>
         </div>`;
