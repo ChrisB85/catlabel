@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
-import { applyVars } from '../utils/rendering';
+import { applyVars, processHtmlDynamicElements } from '../utils/rendering';
 import { useStore } from '../store';
+import { LABEL_TEMPLATE_STYLES } from './templateStyles';
 
 const overlayBaseStyle = {
   position: 'absolute',
@@ -28,39 +29,20 @@ export default function HtmlLabel({
     if (!container) return undefined;
 
     let cancelled = false;
-    const elements = container.querySelectorAll('.auto-text');
 
-    elements.forEach((el) => {
-      let low = 4;
-      let high = 500;
-      let best = 4;
-
-      const targetW = el.clientWidth || el.parentElement?.clientWidth || width;
-      const targetH = el.clientHeight || el.parentElement?.clientHeight || height;
-
-      while (high - low >= 0.5) {
-        const mid = (low + high) / 2;
-        el.style.fontSize = `${mid}px`;
-
-        if (el.scrollWidth <= targetW && el.scrollHeight <= targetH) {
-          best = mid;
-          low = mid + 0.5;
-        } else {
-          high = mid - 0.5;
-        }
-      }
-
-      el.style.fontSize = `${Math.floor(best)}px`;
-    });
-
-    requestAnimationFrame(() => {
+    const process = async () => {
+      await processHtmlDynamicElements(container, width, height);
       if (cancelled) return;
       requestAnimationFrame(() => {
-        if (!cancelled && onRenderComplete) {
-          onRenderComplete();
-        }
+        requestAnimationFrame(() => {
+          if (!cancelled && onRenderComplete) {
+            onRenderComplete();
+          }
+        });
       });
-    });
+    };
+
+    process();
 
     return () => {
       cancelled = true;
@@ -82,7 +64,7 @@ export default function HtmlLabel({
       <div
         ref={containerRef}
         style={{ width: '100%', height: '100%' }}
-        dangerouslySetInnerHTML={{ __html: processedHtml }}
+        dangerouslySetInnerHTML={{ __html: `<style>${LABEL_TEMPLATE_STYLES}</style>${processedHtml}` }}
       />
       {canvasBorder === 'box' && (
         <div

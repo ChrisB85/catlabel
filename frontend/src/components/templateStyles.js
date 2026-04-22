@@ -241,14 +241,11 @@ html, body {
   box-sizing: border-box;
 }
 .auto-text {
+  display: inline-block;
   width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
   text-align: center;
-  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .auto-text * {
   margin: 0 !important;
@@ -263,6 +260,8 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 100%;
+  height: 100%;
 }
 .catlabel-code {
   width: 100%;

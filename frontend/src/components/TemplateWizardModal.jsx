@@ -52,6 +52,9 @@ export default function TemplateWizardModal({ template, onClose }) {
       },
     ]);
 
+    // Instantly select the item so the Properties Panel shows the form fields
+    useStore.setState({ selectedId: baseId });
+
     onClose();
   };
 

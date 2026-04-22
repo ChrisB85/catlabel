@@ -1,101 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Ellipse, Group, Image as KonvaImage, Line, Rect, Text } from 'react-konva';
 import Konva from 'konva';
-import bwipjs from 'bwip-js';
 import { toPng } from 'html-to-image';
-import QRCode from 'qrcode';
-import { applyVars, calculateAutoFitItem, computeOptimalTextSize, resolveDim, useCodeGenerator } from '../utils/rendering';
+import { applyVars, calculateAutoFitItem, computeOptimalTextSize, processHtmlDynamicElements, resolveDim, useCodeGenerator } from '../utils/rendering';
 import { useStore } from '../store';
 import { LABEL_TEMPLATE_STYLES, buildLabelTemplateMarkup } from './templateStyles';
 
-const loadInjectedImage = (src) => new Promise((resolve) => {
-  const image = document.createElement('img');
-  image.onload = () => resolve(image);
-  image.onerror = () => resolve(null);
-  image.src = src;
-});
-
-const processHtmlDynamicElements = async (container, width, height) => {
-  const codeEls = Array.from(container.querySelectorAll('.catlabel-code'));
-
-  for (const el of codeEls) {
-    const type = el.getAttribute('data-type');
-    const format = el.getAttribute('data-format') || 'code128';
-    const value = el.getAttribute('data-value') || '';
-
-    el.innerHTML = '';
-
-    if (!value) {
-      continue;
-    }
-
-    try {
-      let dataUrl = null;
-
-      if (type === 'barcode') {
-        const canvas = document.createElement('canvas');
-        bwipjs.toCanvas(canvas, {
-          bcid: format,
-          text: value,
-          scale: 3,
-          includetext: false,
-          backgroundcolor: 'FFFFFF'
-        });
-        dataUrl = canvas.toDataURL('image/png');
-      } else if (type === 'qrcode') {
-        dataUrl = await QRCode.toDataURL(value, {
-          margin: 1,
-          scale: 4,
-          color: { dark: '#000000', light: '#FFFFFF' }
-        });
-      }
-
-      if (!dataUrl) {
-        continue;
-      }
-
-      const image = await loadInjectedImage(dataUrl);
-      if (!image) {
-        continue;
-      }
-
-      image.style.maxWidth = '100%';
-      image.style.maxHeight = '100%';
-      image.style.width = '100%';
-      image.style.height = '100%';
-      image.style.objectFit = 'contain';
-
-      el.appendChild(image);
-    } catch (error) {
-      console.error('Failed to generate dynamic code element', error);
-    }
-  }
-
-  const autoTexts = container.querySelectorAll('.auto-text');
-
-  autoTexts.forEach((el) => {
-    let low = 4;
-    let high = 500;
-    let best = 4;
-
-    const targetW = el.clientWidth || el.parentElement?.clientWidth || width;
-    const targetH = el.clientHeight || el.parentElement?.clientHeight || height;
-
-    while (high - low >= 0.5) {
-      const mid = (low + high) / 2;
-      el.style.fontSize = `${mid}px`;
-
-      if (el.scrollWidth <= targetW && el.scrollHeight <= targetH) {
-        best = mid;
-        low = mid + 0.5;
-      } else {
-        high = mid - 0.5;
-      }
-    }
-
-    el.style.fontSize = `${Math.floor(best)}px`;
-  });
-};
 
 const useHtmlRasterizer = (htmlString, width, height, isTemplate = false, font = 'Arial') => {
   const [img, setImg] = useState(null);
