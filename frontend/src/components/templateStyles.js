@@ -5,16 +5,16 @@ const DEFAULT_ICON_SRC = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3
 const buildJarApothecaryMarkup = ({ text = '', title = '', subtitle = '' }) => `
   <div class="label-canvas-container apothecary">
     <div class="inner">
-      <div style="font-size: 16cqh; letter-spacing: 4px; font-weight: 700; margin-bottom: auto;">${text || 'PREMIUM'}</div>
-      <div class="auto-text-wrapper" style="flex: 2; margin: 8cqmin 0;">
+      <div class="bound-box" style="flex: 1;"><div class="auto-text" style="letter-spacing: 4px; font-weight: 700;">${text || 'PREMIUM'}</div></div>
+      <div class="bound-box" style="flex: 2; margin: 8px 0;">
         <div class="auto-text" style="font-weight: 900; text-transform: uppercase; font-family: serif;">${title || ''}</div>
       </div>
-      <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin: 8cqmin 0;">
+      <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin: 8px 0; flex: 0.5;">
         <div style="height: 2px; background: black; width: 40px;"></div>
-        <span style="font-size: 16cqh;">✧</span>
+        <span style="font-size: 1.2em;">✧</span>
         <div style="height: 2px; background: black; width: 40px;"></div>
       </div>
-      <div class="auto-text-wrapper" style="flex: 1;">
+      <div class="bound-box" style="flex: 1;">
         <div class="auto-text" style="font-style: italic; font-weight: bold; font-family: serif;">${subtitle || ''}</div>
       </div>
     </div>
@@ -24,12 +24,12 @@ const buildJarApothecaryMarkup = ({ text = '', title = '', subtitle = '' }) => `
 const buildJarFarmhouseMarkup = ({ title = '', subtitle = '' }) => `
   <div class="label-canvas-container farmhouse">
     <div class="stripes"></div>
-    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; padding: 6cqmin; text-align: center;">
-      <div class="auto-text-wrapper" style="flex: 2; width: 100%;">
+    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; padding: 4%; text-align: center;">
+      <div class="bound-box" style="flex: 2; width: 100%;">
         <div class="auto-text" style="font-weight: 900; text-transform: uppercase; font-style: italic; font-family: serif;">${title || ''}</div>
       </div>
-      <div style="width: 100%; height: 4px; background: black; margin: 12cqmin 0;"></div>
-      <div class="auto-text-wrapper" style="width: 100%; flex: 1;">
+      <div style="width: 100%; height: 4px; background: black; margin: 4% 0; flex-shrink: 0;"></div>
+      <div class="bound-box" style="width: 100%; flex: 1;">
         <div class="auto-text" style="font-weight: bold; letter-spacing: 4px; text-transform: uppercase;">${subtitle || ''}</div>
       </div>
     </div>
@@ -261,21 +261,25 @@ export const TEMPLATE_METADATA = [
     html: (p, isLandscape) => {
       if (isLandscape) {
         return `
-          <div class="label-canvas-container" style="display:flex; flex-direction:row;">
+          <div class="label-canvas-container" style="display:flex; flex-direction:row; padding: 0;">
             <div style="width:15%; background:black; color:white; display:flex; align-items:center; justify-content:center; writing-mode:vertical-rl; transform:rotate(180deg);">
-              <div class="auto-text" style="font-weight:900; letter-spacing:4px; padding:12px;">${p.service || ''}</div>
+              <div class="bound-box" style="padding: 12px;"><div class="auto-text" style="font-weight:900; letter-spacing:4px;">${p.service || ''}</div></div>
             </div>
             <div style="flex:1; display:flex; flex-direction:column; padding:16px; gap:12px;">
-              <div style="flex:1; display:flex; flex-direction:column;">
-                <div style="font-size:14px; font-weight:800; margin-bottom:4px;">FROM:</div>
-                <div class="bound-box" style="align-items:flex-start; justify-content:flex-start;">
+              <div style="flex:1; display:flex; flex-direction:column; min-width:0; min-height:0;">
+                <div class="bound-box" style="flex: 0.3; align-items:flex-end; justify-content:flex-start; margin-bottom:4px;">
+                   <div class="auto-text" style="font-weight:800; text-align:left;">FROM:</div>
+                </div>
+                <div class="bound-box" style="flex: 1; align-items:flex-start; justify-content:flex-start;">
                   <div class="auto-text" style="font-weight:600; text-align:left;">${p.sender || ''}</div>
                 </div>
               </div>
               <div style="height:3px; background:black; width:100%; flex-shrink:0;"></div>
-              <div style="flex:2; display:flex; flex-direction:column;">
-                <div style="display:inline-block; background:black; color:white; font-weight:900; padding:4px 8px; align-self:flex-start; margin-bottom:8px; font-size:16px;">SHIP TO:</div>
-                <div class="bound-box" style="align-items:flex-start; justify-content:flex-start;">
+              <div style="flex:2; display:flex; flex-direction:column; min-width:0; min-height:0;">
+                <div class="bound-box" style="flex: 0.4; align-items:flex-end; justify-content:flex-start; background:black; color:white; padding:4px 8px; align-self:flex-start; margin-bottom:8px;">
+                   <div class="auto-text" style="font-weight:900; text-align:left;">SHIP TO:</div>
+                </div>
+                <div class="bound-box" style="flex: 1.6; align-items:flex-start; justify-content:flex-start;">
                   <div class="auto-text" style="font-weight:900; text-align:left;">${p.recipient || ''}</div>
                 </div>
               </div>
@@ -284,21 +288,25 @@ export const TEMPLATE_METADATA = [
       }
 
       return `
-        <div class="label-canvas-container" style="display:flex; flex-direction:column;">
+        <div class="label-canvas-container" style="display:flex; flex-direction:column; padding: 0;">
           <div style="height:15%; background:black; color:white; display:flex; align-items:center; justify-content:center;">
-            <div class="auto-text" style="font-weight:900; letter-spacing:4px; padding:6px;">${p.service || ''}</div>
+            <div class="bound-box" style="padding: 6px;"><div class="auto-text" style="font-weight:900; letter-spacing:4px;">${p.service || ''}</div></div>
           </div>
-          <div style="flex:1; display:flex; flex-direction:column; padding:12px; gap:8px;">
-            <div style="flex:1; display:flex; flex-direction:column;">
-              <div style="font-size:12px; font-weight:800; margin-bottom:4px;">FROM:</div>
-              <div class="bound-box" style="align-items:flex-start; justify-content:flex-start;">
+          <div style="flex:1; display:flex; flex-direction:column; padding:12px; gap:8px; min-width:0; min-height:0;">
+            <div style="flex:1; display:flex; flex-direction:column; min-width:0; min-height:0;">
+              <div class="bound-box" style="flex: 0.3; align-items:flex-end; justify-content:flex-start; margin-bottom:4px;">
+                 <div class="auto-text" style="font-weight:800; text-align:left;">FROM:</div>
+              </div>
+              <div class="bound-box" style="flex: 1; align-items:flex-start; justify-content:flex-start;">
                 <div class="auto-text" style="font-weight:600; text-align:left;">${p.sender || ''}</div>
               </div>
             </div>
             <div style="height:3px; background:black; width:100%; flex-shrink:0;"></div>
-            <div style="flex:2; display:flex; flex-direction:column;">
-              <div style="font-size:14px; font-weight:900; margin-bottom:4px; background:black; color:white; padding:4px; align-self:flex-start;">SHIP TO:</div>
-              <div class="bound-box" style="align-items:flex-start; justify-content:flex-start;">
+            <div style="flex:2; display:flex; flex-direction:column; min-width:0; min-height:0;">
+              <div class="bound-box" style="flex: 0.3; align-items:flex-end; justify-content:flex-start; background:black; color:white; padding:4px; align-self:flex-start; margin-bottom:4px;">
+                 <div class="auto-text" style="font-weight:900; text-align:left;">SHIP TO:</div>
+              </div>
+              <div class="bound-box" style="flex: 1; align-items:flex-start; justify-content:flex-start;">
                 <div class="auto-text" style="font-weight:900; text-align:left;">${p.recipient || ''}</div>
               </div>
             </div>

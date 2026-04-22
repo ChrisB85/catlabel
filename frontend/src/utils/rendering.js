@@ -11,6 +11,7 @@ const loadInjectedImage = (src) => new Promise((resolve) => {
 });
 
 export const processHtmlDynamicElements = async (container, width, height, isCancelled) => {
+  // 1. Process codes (QR/Barcode)
   const codeEls = Array.from(container.querySelectorAll('.catlabel-code'));
 
   for (const el of codeEls) {
@@ -66,6 +67,7 @@ export const processHtmlDynamicElements = async (container, width, height, isCan
 
   if (isCancelled && isCancelled()) return;
 
+  // 2. Wait for all images to load
   const imgEls = Array.from(container.querySelectorAll('img'));
   await Promise.all(imgEls.map((img) => {
     if (img.complete) return Promise.resolve();
@@ -77,60 +79,89 @@ export const processHtmlDynamicElements = async (container, width, height, isCan
 
   if (isCancelled && isCancelled()) return;
 
-  const autoTexts = Array.from(container.querySelectorAll('.auto-text'));
+  // =========================================================================
+  // THREE-PASS AUTO-SCALING PIPELINE
+  // =========================================================================
 
-  autoTexts.forEach((el) => {
-    el.style.fontSize = '1px';
-    el.style.lineHeight = '1';
+  const boxes = Array.from(container.querySelectorAll('.bound-box'));
+
+  // PASS 1: READ
+  // We read the layout while the browser's CSS flexbox calculates the perfect
+  // proportions. We record exact pixel measurements.
+  const boxMetrics = boxes.map((box) => {
+    const rect = box.getBoundingClientRect();
+    const style = window.getComputedStyle(box);
+    const paddingLeft = parseFloat(style.paddingLeft) || 0;
+    const paddingRight = parseFloat(style.paddingRight) || 0;
+    const paddingTop = parseFloat(style.paddingTop) || 0;
+    const paddingBottom = parseFloat(style.paddingBottom) || 0;
+
+    return {
+      outerW: rect.width,
+      outerH: rect.height,
+      innerW: box.clientWidth - paddingLeft - paddingRight,
+      innerH: box.clientHeight - paddingTop - paddingBottom
+    };
   });
 
-  container.offsetHeight;
-
-  autoTexts.forEach((el) => {
-    const parent = el.parentElement;
-    if (!parent) return;
-
-    const w = parent.clientWidth;
-    const h = parent.clientHeight;
-
-    parent.style.width = `${w}px`;
-    parent.style.height = `${h}px`;
-    parent.style.minWidth = `${w}px`;
-    parent.style.minHeight = `${h}px`;
-    parent.style.maxWidth = `${w}px`;
-    parent.style.maxHeight = `${h}px`;
-    parent.style.flex = 'none';
+  // PASS 2: LOCK (WRITE)
+  // We force the flex boxes to absolute pixel dimensions and turn off flex scaling.
+  // This guarantees that when text grows later, it hits a hard wall instead of
+  // stretching the container and causing cascading layout reflows.
+  boxes.forEach((box, i) => {
+    box.style.width = `${boxMetrics[i].outerW}px`;
+    box.style.height = `${boxMetrics[i].outerH}px`;
+    box.style.flex = 'none';
+    box.style.minWidth = 'unset';
+    box.style.minHeight = 'unset';
+    box.style.maxWidth = 'unset';
+    box.style.maxHeight = 'unset';
   });
 
   if (isCancelled && isCancelled()) return;
 
+  // PASS 3: BINARY SCALE
+  // Safely scale text into its locked parent container.
+  const autoTexts = Array.from(container.querySelectorAll('.auto-text'));
+
   autoTexts.forEach((el) => {
-    const parent = el.parentElement;
-    if (!parent) return;
+    const parentBox = el.closest('.bound-box');
+    if (!parentBox) return;
 
-    const targetW = parent.clientWidth || width;
-    const targetH = parent.clientHeight || height;
+    const pIndex = boxes.indexOf(parentBox);
+    if (pIndex < 0) return;
 
-    if (!el.style.whiteSpace) el.style.whiteSpace = 'pre-wrap';
-    if (!el.style.wordBreak) el.style.wordBreak = 'break-word';
+    const targetW = boxMetrics[pIndex].innerW;
+    const targetH = boxMetrics[pIndex].innerH;
 
-    let low = 4;
-    let high = 500;
-    let best = 4;
+    // Reset styles for safe measurement
+    el.style.width = '100%';
+    el.style.height = 'auto';
+
+    let low = 1;
+    let high = 800;
+    let best = 1;
 
     while (high - low >= 0.5) {
       const mid = (low + high) / 2;
       el.style.fontSize = `${mid}px`;
 
-      if (el.scrollWidth <= targetW && el.scrollHeight <= targetH) {
+      const rect = el.getBoundingClientRect();
+
+      // scrollWidth captures text that refuses to wrap (e.g. single long word, or nowrap)
+      const overflowsH = el.scrollWidth > targetW + 1;
+      const overflowsV = rect.height > targetH + 1;
+
+      if (overflowsH || overflowsV) {
+        high = mid - 0.5;
+      } else {
         best = mid;
         low = mid + 0.5;
-      } else {
-        high = mid - 0.5;
       }
     }
 
-    el.style.fontSize = `${Math.floor(best)}px`;
+    // Apply the winning size, rounded safely
+    el.style.fontSize = `${Math.floor(best * 10) / 10}px`;
   });
 };
 
