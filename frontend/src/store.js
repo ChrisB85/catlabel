@@ -20,8 +20,8 @@ const recalcAutoFit = (items, batchRecords, cw, ch) => {
   return changed ? nextItems : items;
 };
 
-const buildTemplateHtml = (templateId, params = {}) =>
-  buildLabelTemplateMarkup({ template_id: templateId, params }, {});
+const buildTemplateHtml = (templateId, params = {}, width = 384, height = 384) =>
+  buildLabelTemplateMarkup({ template_id: templateId, params, width, height }, {});
 
 const normalizeCanvasState = (canvasState = {}) => {
   const items = Array.isArray(canvasState.items) ? canvasState.items : [];
@@ -35,7 +35,12 @@ const normalizeCanvasState = (canvasState = {}) => {
         id: activeTemplate.id,
         params: activeTemplate.params || {}
       },
-      htmlContent: canvasState.htmlContent || buildTemplateHtml(activeTemplate.id, activeTemplate.params || {}),
+      htmlContent: buildTemplateHtml(
+        activeTemplate.id,
+        activeTemplate.params || {},
+        canvasState.width || 384,
+        canvasState.height || 384
+      ),
       items
     };
   }
@@ -51,7 +56,12 @@ const normalizeCanvasState = (canvasState = {}) => {
       ...canvasState,
       designMode: 'html',
       activeTemplate: { id: templateId, params },
-      htmlContent: buildTemplateHtml(templateId, params),
+      htmlContent: buildTemplateHtml(
+        templateId,
+        params,
+        canvasState.width || 384,
+        canvasState.height || 384
+      ),
       items: []
     };
   }
@@ -198,17 +208,17 @@ export const useStore = create(withHistory((set, get) => ({
     ...(val === 'canvas' ? { activeTemplate: null } : {})
   })),
   setHtmlContent: (val) => set({ htmlContent: val }),
-  setTemplateConfig: (id, params = {}) => set({
+  setTemplateConfig: (id, params = {}) => set((state) => ({
     designMode: 'html',
     activeTemplate: { id, params },
-    htmlContent: buildTemplateHtml(id, params)
-  }),
+    htmlContent: buildTemplateHtml(id, params, state.canvasWidth, state.canvasHeight)
+  })),
   updateTemplateParams: (newParams) => set((state) => {
     if (!state.activeTemplate) return state;
     const params = { ...state.activeTemplate.params, ...newParams };
     return {
       activeTemplate: { ...state.activeTemplate, params },
-      htmlContent: buildTemplateHtml(state.activeTemplate.id, params)
+      htmlContent: buildTemplateHtml(state.activeTemplate.id, params, state.canvasWidth, state.canvasHeight)
     };
   }),
   ejectTemplate: () => set({ activeTemplate: null }),
@@ -794,6 +804,16 @@ export const useStore = create(withHistory((set, get) => ({
       isRotated,
       splitMode,
       canvasBorder: preset.border || 'none',
+      ...(state.activeTemplate
+        ? {
+            htmlContent: buildTemplateHtml(
+              state.activeTemplate.id,
+              state.activeTemplate.params,
+              nextCanvasWidth,
+              nextCanvasHeight
+            )
+          }
+        : {}),
       items: recalcAutoFit(state.items, state.batchRecords, nextCanvasWidth, nextCanvasHeight)
     };
   }),
@@ -877,11 +897,24 @@ export const useStore = create(withHistory((set, get) => ({
 
   setIsRotated: (val) => set((state) => {
     if (val !== state.isRotated) {
+      const nextCanvasWidth = state.canvasHeight;
+      const nextCanvasHeight = state.canvasWidth;
+
       return {
         isRotated: val,
-        canvasWidth: state.canvasHeight,
-        canvasHeight: state.canvasWidth,
-        items: recalcAutoFit(state.items, state.batchRecords, state.canvasHeight, state.canvasWidth)
+        canvasWidth: nextCanvasWidth,
+        canvasHeight: nextCanvasHeight,
+        ...(state.activeTemplate
+          ? {
+              htmlContent: buildTemplateHtml(
+                state.activeTemplate.id,
+                state.activeTemplate.params,
+                nextCanvasWidth,
+                nextCanvasHeight
+              )
+            }
+          : {}),
+        items: recalcAutoFit(state.items, state.batchRecords, nextCanvasWidth, nextCanvasHeight)
       };
     }
     return { isRotated: val };
@@ -971,7 +1004,17 @@ export const useStore = create(withHistory((set, get) => ({
       canvasWidth: newW,
       canvasHeight: newH,
       isRotated: rot,
-      canvasBorder: border
+      canvasBorder: border,
+      ...(currentState.activeTemplate
+        ? {
+            htmlContent: buildTemplateHtml(
+              currentState.activeTemplate.id,
+              currentState.activeTemplate.params,
+              newW,
+              newH
+            )
+          }
+        : {})
     });
 
     if (!mac) {
@@ -1411,6 +1454,16 @@ export const useStore = create(withHistory((set, get) => ({
   setCanvasSize: (width, height) => set((state) => ({
     canvasWidth: width,
     canvasHeight: height,
+    ...(state.activeTemplate
+      ? {
+          htmlContent: buildTemplateHtml(
+            state.activeTemplate.id,
+            state.activeTemplate.params,
+            width,
+            height
+          )
+        }
+      : {}),
     items: recalcAutoFit(state.items, state.batchRecords, width, height)
   })),
 })));

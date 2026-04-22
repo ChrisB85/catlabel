@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { applyVars, processHtmlDynamicElements } from '../utils/rendering';
 import { useStore } from '../store';
-import { LABEL_TEMPLATE_STYLES } from './templateStyles';
 
 const overlayBaseStyle = {
   position: 'absolute',
@@ -64,7 +63,7 @@ export default function HtmlLabel({
       <div
         ref={containerRef}
         style={{ width: '100%', height: '100%' }}
-        dangerouslySetInnerHTML={{ __html: `<style>${LABEL_TEMPLATE_STYLES}</style>${processedHtml}` }}
+        dangerouslySetInnerHTML={{ __html: processedHtml }}
       />
       {canvasBorder === 'box' && (
         <div

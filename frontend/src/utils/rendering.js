@@ -66,15 +66,28 @@ export const processHtmlDynamicElements = async (container, width, height) => {
     }
   }
 
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
   const autoTexts = container.querySelectorAll('.auto-text');
 
   autoTexts.forEach((el) => {
+    const parent = el.parentElement;
+    if (!parent) return;
+
+    const targetW = parent.clientWidth || width;
+    const targetH = parent.clientHeight || height;
+
+    const origW = parent.style.width;
+    const origH = parent.style.height;
+    const origOverflow = parent.style.overflow;
+
+    parent.style.width = `${targetW}px`;
+    parent.style.height = `${targetH}px`;
+    parent.style.overflow = 'hidden';
+
     let low = 4;
     let high = 500;
     let best = 4;
-
-    const targetW = el.parentElement?.clientWidth || width;
-    const targetH = el.parentElement?.clientHeight || height;
 
     el.style.whiteSpace = 'pre-wrap';
     el.style.wordBreak = 'break-word';
@@ -92,6 +105,10 @@ export const processHtmlDynamicElements = async (container, width, height) => {
     }
 
     el.style.fontSize = `${Math.floor(best)}px`;
+
+    parent.style.width = origW;
+    parent.style.height = origH;
+    parent.style.overflow = origOverflow;
   });
 };
 

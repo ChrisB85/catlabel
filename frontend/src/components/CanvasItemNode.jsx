@@ -4,7 +4,6 @@ import Konva from 'konva';
 import { toPng } from 'html-to-image';
 import { applyVars, calculateAutoFitItem, computeOptimalTextSize, processHtmlDynamicElements, resolveDim, useCodeGenerator } from '../utils/rendering';
 import { useStore } from '../store';
-import { LABEL_TEMPLATE_STYLES } from './templateStyles';
 
 
 const useHtmlRasterizer = (htmlString, width, height, isTemplate = false, font = 'Arial') => {
@@ -48,9 +47,7 @@ const useHtmlRasterizer = (htmlString, width, height, isTemplate = false, font =
     container.style.height = `${height}px`;
     container.style.fontFamily = `'${fontFamily}', sans-serif`;
     
-    container.innerHTML = isTemplate
-      ? `<style>${LABEL_TEMPLATE_STYLES}</style>${htmlString}`
-      : htmlString;
+    container.innerHTML = htmlString;
 
     const rasterize = async () => {
       await processHtmlDynamicElements(container, width, height);

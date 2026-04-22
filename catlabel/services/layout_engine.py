@@ -4,7 +4,7 @@ TEMPLATE_METADATA = [
         "category": "Layout",
         "name": "Centered Text",
         "description": "A single, perfectly auto-scaling text block.",
-        "fields": [{"name": "text", "label": "Main Text", "type": "textarea"}],
+        "fields": [{"name": "text", "label": "Main Text", "type": "textarea", "default": "Centered Text"}],
     },
     {
         "id": "title_subtitle",
@@ -12,8 +12,8 @@ TEMPLATE_METADATA = [
         "name": "Title & Subtitle",
         "description": "Stacked text with a large bold title.",
         "fields": [
-            {"name": "title", "label": "Title", "type": "text"},
-            {"name": "subtitle", "label": "Subtitle", "type": "text"},
+            {"name": "title", "label": "Title", "type": "text", "default": "MAIN TITLE"},
+            {"name": "subtitle", "label": "Subtitle", "type": "text", "default": "Subheading text goes here"},
         ],
     },
     {
@@ -69,7 +69,16 @@ TEMPLATE_METADATA = [
             {"name": "department", "label": "Department / Category", "type": "text", "default": "WAREHOUSE"},
             {"name": "title", "label": "Item Name", "type": "text", "default": "Item Name"},
             {"name": "sku", "label": "SKU / Subtext", "type": "text", "default": "SKU-123"},
-            {"name": "code_type", "label": "Code Type (qrcode or barcode)", "type": "text", "default": "qrcode"},
+            {
+                "name": "code_type",
+                "label": "Code Type",
+                "type": "select",
+                "options": [
+                    {"label": "QR Code", "value": "qrcode"},
+                    {"label": "Barcode", "value": "barcode"},
+                ],
+                "default": "qrcode",
+            },
             {"name": "code_data", "label": "Code Data", "type": "text", "default": "INV-001"},
         ],
     },
@@ -78,7 +87,7 @@ TEMPLATE_METADATA = [
         "category": "Dedicated",
         "name": "Cable Flag",
         "description": "Fold-over tag with a dashed center line. Repeats text on both sides.",
-        "fields": [{"name": "text", "label": "Cable ID / Text", "type": "text"}],
+        "fields": [{"name": "text", "label": "Cable ID / Text", "type": "text", "default": "CABLE-01"}],
     },
     {
         "id": "shipping_address",
@@ -86,9 +95,9 @@ TEMPLATE_METADATA = [
         "name": "Shipping Address",
         "description": "Professional shipping label with service banner and sender/recipient blocks.",
         "fields": [
-            {"name": "service", "label": "Service Type (e.g. PRIORITY, STANDARD)", "type": "text", "default": "PRIORITY"},
-            {"name": "sender", "label": "Sender Address", "type": "textarea"},
-            {"name": "recipient", "label": "Recipient Address", "type": "textarea"},
+            {"name": "service", "label": "Service Type", "type": "text", "default": "PRIORITY"},
+            {"name": "sender", "label": "Sender Address", "type": "textarea", "default": "John Doe\n123 Sender St."},
+            {"name": "recipient", "label": "Recipient Address", "type": "textarea", "default": "Jane Smith\n456 Recipient Ave."},
         ],
     },
     {
@@ -106,9 +115,9 @@ TEMPLATE_METADATA = [
         "name": "Retail Sale Tag",
         "description": "High contrast inverted price box.",
         "fields": [
-            {"name": "product_name", "label": "Product", "type": "text"},
-            {"name": "old_price", "label": "Old Price", "type": "text"},
-            {"name": "new_price", "label": "New Price", "type": "text"},
+            {"name": "product_name", "label": "Product", "type": "text", "default": "Sale Item"},
+            {"name": "old_price", "label": "Old Price", "type": "text", "default": "29.99"},
+            {"name": "new_price", "label": "New Price", "type": "text", "default": "19.99"},
             {"name": "currency", "label": "Currency", "type": "text", "default": "$"},
         ],
     },
@@ -118,9 +127,9 @@ TEMPLATE_METADATA = [
         "name": "IT Asset Tag",
         "description": "Header bar, QR code, and details.",
         "fields": [
-            {"name": "department", "label": "Department", "type": "text"},
-            {"name": "asset_id", "label": "Asset ID", "type": "text"},
-            {"name": "description", "label": "Description", "type": "text"},
+            {"name": "department", "label": "Department", "type": "text", "default": "IT DEPT"},
+            {"name": "asset_id", "label": "Asset ID", "type": "text", "default": "AST-0001"},
+            {"name": "description", "label": "Description", "type": "text", "default": "Laptop Computer"},
         ],
     },
     {
@@ -139,8 +148,8 @@ TEMPLATE_METADATA = [
                 ],
                 "default": "jar_apothecary",
             },
-            {"name": "title", "label": "Main Label", "type": "text"},
-            {"name": "subtitle", "label": "Subtitle / Details", "type": "text"},
+            {"name": "title", "label": "Main Label", "type": "text", "default": "BASIL"},
+            {"name": "subtitle", "label": "Subtitle / Details", "type": "text", "default": "Sweet & Aromatic"},
             {"name": "text", "label": "Top Text (e.g. Premium)", "type": "text", "default": "PREMIUM"},
         ],
     },
@@ -154,6 +163,13 @@ TEMPLATE_METADATA = [
             {"name": "exp_date", "label": "Expiration Date", "type": "text", "default": "2025-12-31"},
             {"name": "made_date", "label": "Mfg / Made On (Optional)", "type": "text", "default": ""},
         ],
+    },
+    {
+        "id": "custom",
+        "category": "Layout",
+        "name": "Custom HTML",
+        "description": "Raw HTML entry.",
+        "fields": [{"name": "custom_html", "label": "HTML Content", "type": "textarea", "default": "<div>Hello</div>"}],
     },
 ]
 
