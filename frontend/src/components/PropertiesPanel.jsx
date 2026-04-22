@@ -9,6 +9,7 @@ import AIAssistant from './AIAssistant';
 import BatchPrintModal from './BatchPrintModal';
 import IconPicker from './IconPicker';
 import { calculateAutoFitItem } from '../utils/rendering';
+import { TEMPLATE_METADATA } from './templateStyles';
 
 const pxToMm = (px) => (px / 8).toFixed(1);
 const mmToPx = (mm) => Math.round(mm * 8);
@@ -131,6 +132,13 @@ const ToggleBtn = ({ icon: Icon, active, onClick, label }) => (
 export default function PropertiesPanel() {
   const { items, selectedId, updateItem, deleteItem, canvasWidth, canvasHeight, canvasBorder, setCanvasBorder, canvasBorderThickness, setCanvasBorderThickness, setCanvasSize, getMmToPx, getPxToMm, settings, updateSettingsAPI, fonts, uploadFont, isRotated, setIsRotated, splitMode, setSplitMode, printerProfile, selectedPrinter, selectedPrinterInfo, batchRecords, setBatchRecords, updateBatchRecord, addBatchRecord, removeBatchRecord, generateBatchMatrix, generateBatchSequence, designMode, setDesignMode, htmlContent, setHtmlContent } = useStore();
   const selectedItem = items.find(i => i.id === selectedId);
+  const selectedTemplateChild = selectedItem?.type === 'group'
+    ? (selectedItem.children || []).find((child) => child.type === 'label_template')
+    : null;
+  const selectedTemplateItem = selectedItem?.type === 'label_template' ? selectedItem : selectedTemplateChild;
+  const selectedTemplateCodeChild = selectedItem?.type === 'group'
+    ? (selectedItem.children || []).find((child) => child.type === 'barcode' || child.type === 'qrcode')
+    : null;
   const isPreCut = selectedPrinterInfo?.media_type === 'pre-cut';
   const pInfo = selectedPrinterInfo || {};
   const caps = pInfo.capabilities || {};
@@ -191,18 +199,6 @@ export default function PropertiesPanel() {
 
   const inputClass = "w-full bg-transparent border border-neutral-300 dark:border-neutral-700 rounded-none p-2 text-sm text-neutral-900 dark:text-white focus:outline-none focus:border-blue-500 transition-colors";
   const labelClass = "block text-[10px] font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-widest mb-1.5 truncate";
-  const labelTemplateOptions = [
-    { id: 'default', label: 'Default' },
-    { id: 'center', label: 'Center' },
-    { id: 'maximize', label: 'Maximize' },
-    { id: 'title_subtitle', label: 'Title + Subtitle' },
-    { id: 'warning_banner', label: 'Warning Banner' },
-    { id: 'price_tag', label: 'Price Tag with Barcode' },
-    { id: 'address', label: 'Address' },
-    { id: 'jar_apothecary', label: 'Jar: Apothecary' },
-    { id: 'jar_farmhouse', label: 'Jar: Farmhouse' },
-    { id: 'custom', label: 'Custom HTML' }
-  ];
 
   // --- Actions ---
 
@@ -338,13 +334,50 @@ export default function PropertiesPanel() {
     await updateSettingsAPI(localSettings);
     setTimeout(() => setIsSaving(false), 1500);
   };
-  
+
+  const updateSelectedTemplate = (templateChanges, codeChanges = null) => {
+    if (!selectedItem || !selectedTemplateItem) return;
+
+    if (selectedItem.type === 'label_template') {
+      updateItem(selectedId, templateChanges);
+      return;
+    }
+
+    updateItem(selectedId, {
+      children: (selectedItem.children || []).map((child) => {
+        if (child.id === selectedTemplateItem.id) {
+          return { ...child, ...templateChanges };
+        }
+        if (codeChanges && selectedTemplateCodeChild && child.id === selectedTemplateCodeChild.id) {
+          return { ...child, ...codeChanges };
+        }
+        return child;
+      })
+    });
+  };
 
   // Restrict one axis strictly to the hardware print width, letting the feed axis grow infinitely.
   const dotsPerMm = localSettings.default_dpi / 25.4;
   const printPx = Math.round(localSettings.print_width_mm * dotsPerMm);
 
-  const templateStr = items.map((i) => `${i.text || ''} ${i.title || ''} ${i.subtitle || ''} ${i.data || ''} ${i.html || ''} ${i.custom_html || ''}`).join(' ');
+  const collectItemTemplateValues = (item) => {
+    if (!item) return '';
+
+    const directValues = [
+      item.text || '',
+      item.title || '',
+      item.subtitle || '',
+      item.data || '',
+      item.html || '',
+      item.custom_html || '',
+      ...Object.values(item.params || {}).map((value) => String(value || ''))
+    ].join(' ');
+
+    const childValues = (item.children || []).map((child) => collectItemTemplateValues(child)).join(' ');
+    return `${directValues} ${childValues}`;
+  };
+
+  const templateStr = items.map((item) => collectItemTemplateValues(item)).join(' ');
   const templateMatches = templateStr.match(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g) || [];
   const templateKeys = templateMatches.map((match) => match.replace(/[{}]/g, '').trim());
   const existingKeys = batchRecords.flatMap((record) => Object.keys(record || {}));
@@ -841,20 +874,28 @@ export default function PropertiesPanel() {
                 </>
               )}
 
-              {selectedItem.type === 'label_template' && (
+              {selectedTemplateItem && (
                 <>
                   <div>
-                    <label className={labelClass}>Template</label>
-                    <select name="template_id" value={selectedItem.template_id || 'default'} onChange={handleChange} className={inputClass}>
-                      {labelTemplateOptions.map((template) => (
-                        <option key={template.id} value={template.id}>{template.label}</option>
+                    <label className={labelClass}>Template Engine</label>
+                    <select
+                      value={selectedTemplateItem.template_id || 'centered_text'}
+                      onChange={(e) => updateSelectedTemplate({ template_id: e.target.value })}
+                      className={inputClass}
+                    >
+                      {TEMPLATE_METADATA.map((template) => (
+                        <option key={template.id} value={template.id}>{template.name}</option>
                       ))}
                     </select>
                   </div>
                   <div>
                     <label className={labelClass}>Font Family</label>
                     <div className="flex gap-2">
-                      <select name="font" value={selectedItem.font || settings?.default_font || 'RobotoCondensed.ttf'} onChange={handleChange} className={inputClass}>
+                      <select
+                        value={selectedTemplateItem.font || settings?.default_font || 'RobotoCondensed.ttf'}
+                        onChange={(e) => updateSelectedTemplate({ font: e.target.value })}
+                        className={inputClass}
+                      >
                         <option value="arial.ttf">System Arial</option>
                         {fonts.map(f => (
                           <option key={f.id} value={f.name}>{f.name.split('.')[0]}</option>
@@ -867,37 +908,82 @@ export default function PropertiesPanel() {
                     </div>
                   </div>
 
-                  {['title_subtitle', 'price_tag', 'jar_apothecary', 'jar_farmhouse'].includes(selectedItem.template_id) ? (
-                    <>
-                      {selectedItem.template_id === 'jar_apothecary' && (
-                        <div>
-                          <label className={labelClass}>Top Text</label>
-                          <input name="text" value={selectedItem.text || ''} onChange={handleChange} className={inputClass} placeholder="PREMIUM" />
-                        </div>
-                      )}
-                      <div>
-                        <label className={labelClass}>Title</label>
-                        <input name="title" value={selectedItem.title || ''} onChange={handleChange} className={inputClass} />
-                      </div>
-                      <div>
-                        <label className={labelClass}>Subtitle</label>
-                        <input name="subtitle" value={selectedItem.subtitle || ''} onChange={handleChange} className={inputClass} />
-                      </div>
-                    </>
-                  ) : selectedItem.template_id === 'custom' ? (
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className={labelClass.replace('mb-1.5', 'mb-0')}>Custom HTML</label>
-                        <button onClick={() => handleFormatHtml('item')} className="text-[9px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-bold uppercase hover:bg-blue-100 transition-colors">Format</button>
-                      </div>
-                      <textarea name="custom_html" value={selectedItem.custom_html || ''} onChange={handleChange} className={inputClass} rows={10} />
-                    </div>
-                  ) : (
-                    <div>
-                      <label className={labelClass}>{selectedItem.template_id === 'address' ? 'Address Text' : 'Main Text'}</label>
-                      <textarea name="text" value={selectedItem.text || ''} onChange={handleChange} className={inputClass} rows={selectedItem.template_id === 'address' ? 6 : 3} />
-                    </div>
-                  )}
+                  <div className="mt-4 pt-4 border-t border-neutral-100 dark:border-neutral-800 space-y-3">
+                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-2">Template Data</h3>
+
+                    {(() => {
+                      const meta = TEMPLATE_METADATA.find((template) => template.id === selectedTemplateItem.template_id) || TEMPLATE_METADATA[0];
+                      const params = selectedTemplateItem.params || {};
+
+                      return meta.fields.map((field) => {
+                        const value = params[field.name] ?? selectedTemplateItem[field.name] ?? field.default ?? '';
+                        const handleParamChange = (nextValue) => {
+                          const nextParams = {
+                            ...params,
+                            [field.name]: nextValue
+                          };
+                          const shouldSyncCode = field.name === 'barcode' || field.name === 'code_data';
+
+                          updateSelectedTemplate(
+                            { params: nextParams },
+                            shouldSyncCode && selectedTemplateCodeChild
+                              ? { data: nextValue }
+                              : null
+                          );
+                        };
+
+                        if (field.type === 'textarea' || field.name === 'custom_html') {
+                          return (
+                            <div key={field.name}>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className={labelClass.replace('mb-1.5', 'mb-0')}>{field.label}</label>
+                                {field.name === 'custom_html' && (
+                                  <button onClick={() => handleFormatHtml('item')} className="text-[9px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-bold uppercase hover:bg-blue-100 transition-colors">Format</button>
+                                )}
+                              </div>
+                              <textarea
+                                value={value}
+                                onChange={(e) => handleParamChange(e.target.value)}
+                                className={`${inputClass} ${field.name === 'custom_html' ? 'font-mono' : ''}`}
+                                rows={field.name === 'custom_html' ? 10 : 3}
+                              />
+                            </div>
+                          );
+                        }
+
+                        if (field.type === 'select') {
+                          return (
+                            <div key={field.name}>
+                              <label className={labelClass}>{field.label}</label>
+                              <select
+                                value={value}
+                                onChange={(e) => handleParamChange(e.target.value)}
+                                className={inputClass}
+                              >
+                                {(field.options || []).map((option) => (
+                                  <option key={option.value || option} value={option.value || option}>
+                                    {option.label || option}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div key={field.name}>
+                            <label className={labelClass}>{field.label}</label>
+                            <input
+                              type="text"
+                              value={value}
+                              onChange={(e) => handleParamChange(e.target.value)}
+                              className={inputClass}
+                            />
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
                 </>
               )}
 
@@ -980,7 +1066,7 @@ export default function PropertiesPanel() {
                 </>
               )}
 
-              {selectedItem.type === 'label_template' && (
+              {selectedTemplateItem && (
                 <div className="text-[10px] text-neutral-500 leading-relaxed border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/30 p-3">
                   Standard templates stay perfectly consistent. Use the <strong>Custom HTML</strong> option only for one-off styling requests.
                 </div>

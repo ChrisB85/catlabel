@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Wand2, Database, AlertTriangle, LayoutTemplate, ChevronDown } from 'lucide-react';
 import { useStore } from '../store';
-import { calculateAutoFitItem } from '../utils/rendering';
 import IconPicker from './IconPicker';
 import PresetPickerModal from './PresetPickerModal';
 
@@ -12,7 +11,6 @@ export default function TemplateWizardModal({ template, onClose }) {
   } = useStore();
   const [formData, setFormData] = useState({});
   const [batchMode, setBatchMode] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [pickerField, setPickerField] = useState(null);
   const [showPresetPicker, setShowPresetPicker] = useState(false);
   const activePreset = useStore((state) => state.getActivePreset());
@@ -24,49 +22,100 @@ export default function TemplateWizardModal({ template, onClose }) {
       if (field.type === 'select' && field.options?.length > 0) {
         defaultVal = field.default || (field.options[0].value || field.options[0]);
       }
-      initialData[field.name] = batchMode && field.type === 'text' ? `{{ ${field.name} }}` : defaultVal;
+      initialData[field.name] = batchMode && (field.type === 'text' || field.type === 'textarea')
+        ? `{{ ${field.name} }}`
+        : defaultVal;
     });
     setFormData(initialData);
   }, [template, batchMode]);
 
-
-  // Intelligent warning if the canvas is too small for data-heavy templates
   const isSmallLabel = canvasWidth < 250 || canvasHeight < 250;
   const needsSpace = ['shipping_address', 'price_tag'].includes(template.id);
   const showSizeWarning = isSmallLabel && needsSpace;
 
-  const handleGenerate = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/templates/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          template_id: template.id,
-          width: canvasWidth,
-          height: canvasHeight,
-          params: formData
-        })
-      });
+  const handleGenerate = () => {
+    clearCanvas();
 
-      if (!res.ok) {
-        throw new Error('Failed to generate layout');
+    const isLandscape = canvasWidth > canvasHeight;
+    const baseId = `template-${Date.now()}`;
+    const hasPriceTagCode = template.id === 'price_tag' && Boolean(String(formData.barcode || '').trim());
+    const hasInventoryCode = template.id === 'inventory_tag' && Boolean(String(formData.code_data || '').trim());
+
+    if (hasPriceTagCode || hasInventoryCode) {
+      let htmlW = canvasWidth;
+      let htmlH = canvasHeight;
+      let codeX = 0;
+      let codeY = 0;
+      let codeW = 0;
+      let codeH = 0;
+
+      if (isLandscape) {
+        htmlW = Math.max(5, Math.round(canvasWidth * 0.65));
+        codeW = Math.max(5, canvasWidth - htmlW - 24);
+        codeH = Math.max(5, canvasHeight - 32);
+        codeX = htmlW + 8;
+        codeY = 16;
+      } else {
+        htmlH = Math.max(5, Math.round(canvasHeight * 0.65));
+        codeW = Math.max(5, canvasWidth - 32);
+        codeH = Math.max(5, canvasHeight - htmlH - 24);
+        codeX = 16;
+        codeY = htmlH + 8;
       }
 
-      const data = await res.json();
-      const optimizedItems = (data.items || []).map((item) =>
-        calculateAutoFitItem(item, useStore.getState().batchRecords, canvasWidth, canvasHeight)
-      );
+      const codeType = hasInventoryCode ? 'qrcode' : 'barcode';
+      const codeData = hasInventoryCode ? formData.code_data : formData.barcode;
 
-      clearCanvas();
-      setItems(optimizedItems);
-      onClose();
-    } catch (err) {
-      console.error(err);
-      alert('Failed to generate template.');
-    } finally {
-      setLoading(false);
+      setItems([
+        {
+          id: baseId,
+          type: 'group',
+          x: 0,
+          y: 0,
+          width: canvasWidth,
+          height: canvasHeight,
+          pageIndex: 0,
+          children: [
+            {
+              id: `${baseId}-html`,
+              type: 'label_template',
+              template_id: template.id,
+              params: formData,
+              x: 0,
+              y: 0,
+              width: htmlW,
+              height: htmlH,
+            },
+            {
+              id: `${baseId}-code`,
+              type: codeType,
+              barcode_type: 'code128',
+              data: codeData,
+              x: codeX,
+              y: codeY,
+              width: codeW,
+              height: codeH,
+            },
+          ],
+        },
+      ]);
+    } else {
+      setItems([
+        {
+          id: baseId,
+          type: 'label_template',
+          template_id: template.id,
+          params: formData,
+          x: 0,
+          y: 0,
+          width: canvasWidth,
+          height: canvasHeight,
+          pageIndex: 0,
+        },
+      ]);
     }
+
+    onClose();
   };
 
   const inputClass = 'w-full bg-transparent border border-neutral-300 dark:border-neutral-700 p-2 text-sm dark:text-white focus:outline-none focus:border-blue-500 mb-3 transition-colors';
@@ -139,7 +188,7 @@ export default function TemplateWizardModal({ template, onClose }) {
                   onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
                   className={inputClass}
                 >
-                  {field.options.map((option) => (
+                  {field.options?.map((option) => (
                     <option key={option.value || option} value={option.value || option}>
                       {option.label || option}
                     </option>
@@ -180,10 +229,9 @@ export default function TemplateWizardModal({ template, onClose }) {
         <div className="p-4 border-t border-neutral-100 dark:border-neutral-800 mt-auto">
           <button
             onClick={handleGenerate}
-            disabled={loading}
-            className="w-full bg-blue-600 text-white px-4 py-3 hover:bg-blue-700 transition-colors text-xs uppercase tracking-widest font-bold flex justify-center items-center gap-2 disabled:opacity-50"
+            className="w-full bg-blue-600 text-white px-4 py-3 hover:bg-blue-700 transition-colors text-xs uppercase tracking-widest font-bold"
           >
-            {loading ? 'Generating...' : 'Generate Layout'}
+            Generate Layout
           </button>
         </div>
       </div>

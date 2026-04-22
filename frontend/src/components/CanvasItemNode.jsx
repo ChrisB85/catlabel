@@ -452,13 +452,7 @@ export default function CanvasItemNode({
   } else if (item.type === 'image') {
     element = <URLImage src={item.src} width={item.width} height={item.height} />;
   } else if (item.type === 'label_template') {
-    const templateMarkup = buildLabelTemplateMarkup({
-      ...item,
-      text: substitutedText,
-      title: substitutedTitle,
-      subtitle: substitutedSubtitle,
-      custom_html: substitutedCustomHtml
-    });
+    const templateMarkup = buildLabelTemplateMarkup(item, record);
     element = (
       <RasterizedHtml
         html={templateMarkup}
