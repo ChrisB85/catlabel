@@ -19,36 +19,83 @@ export const TEMPLATE_METADATA = [
     ],
   },
   {
+    id: 'icon_text',
+    category: 'Layout',
+    name: 'Icon + Text',
+    description: 'A clean icon next to your text.',
+    fields: [
+      { name: 'icon_src', label: 'Icon', type: 'icon' },
+      { name: 'text', label: 'Text', type: 'text', default: 'Label' },
+      {
+        name: 'direction',
+        label: 'Layout',
+        type: 'select',
+        options: [
+          { label: 'Row (Left to Right)', value: 'row' },
+          { label: 'Column (Top to Bottom)', value: 'col' },
+        ],
+        default: 'row',
+      },
+    ],
+  },
+  {
+    id: 'qr_text',
+    category: 'Layout',
+    name: 'QR Code + Text',
+    description: 'A QR code with adjacent text.',
+    fields: [
+      { name: 'data', label: 'QR Data', type: 'text', default: 'https://google.com' },
+      { name: 'text', label: 'Text', type: 'textarea', default: 'Scan Me' },
+    ],
+  },
+  {
     id: 'price_tag',
     category: 'Dedicated',
     name: 'Price Tag with Barcode',
-    description: 'Retail price tag.',
+    description: 'Retail price tag. Automatically adapts to square or wide labels.',
     fields: [
       { name: 'currency_symbol', label: 'Currency Symbol', type: 'text', default: '$' },
       { name: 'price_main', label: 'Main Price', type: 'text', default: '19' },
       { name: 'price_cents', label: 'Cents', type: 'text', default: '99' },
       { name: 'unit', label: 'Unit (e.g. /ea)', type: 'text', default: '' },
       { name: 'product_name', label: 'Product Name', type: 'text', default: 'Product Name' },
-      { name: 'barcode', label: 'Barcode Data', type: 'text', default: '123456789' },
+      { name: 'barcode', label: 'Barcode (Leave blank to omit)', type: 'text', default: '123456789' },
     ],
   },
   {
     id: 'inventory_tag',
     category: 'Dedicated',
     name: 'Modern Inventory Tag',
-    description: 'Professional asset tag with inverted department header.',
+    description: 'Professional asset tag with inverted department header and QR/Barcode.',
     fields: [
       { name: 'department', label: 'Department / Category', type: 'text', default: 'WAREHOUSE' },
       { name: 'title', label: 'Item Name', type: 'text', default: 'Item Name' },
       { name: 'sku', label: 'SKU / Subtext', type: 'text', default: 'SKU-123' },
+      {
+        name: 'code_type',
+        label: 'Code Type',
+        type: 'select',
+        options: [
+          { label: 'QR Code', value: 'qrcode' },
+          { label: 'Barcode', value: 'barcode' },
+        ],
+        default: 'qrcode',
+      },
       { name: 'code_data', label: 'Code Data', type: 'text', default: 'INV-001' },
     ],
+  },
+  {
+    id: 'cable_flag',
+    category: 'Dedicated',
+    name: 'Cable Flag',
+    description: 'Fold-over tag with a dashed center line. Repeats text on both sides.',
+    fields: [{ name: 'text', label: 'Cable ID / Text', type: 'text', default: 'CABLE-01' }],
   },
   {
     id: 'shipping_address',
     category: 'Dedicated',
     name: 'Shipping Address',
-    description: 'Professional shipping label with service banner.',
+    description: 'Professional shipping label with service banner and sender/recipient blocks.',
     fields: [
       { name: 'service', label: 'Service Type', type: 'text', default: 'PRIORITY' },
       { name: 'sender', label: 'Sender Address', type: 'textarea', default: 'John Doe\n123 Sender St.' },
@@ -61,6 +108,50 @@ export const TEMPLATE_METADATA = [
     name: 'Warning Banner',
     description: 'Inverted black background with bold white text.',
     fields: [{ name: 'text', label: 'Warning Text', type: 'text', default: 'FRAGILE' }],
+  },
+  {
+    id: 'sale_tag',
+    category: 'Dedicated',
+    name: 'Retail Sale Tag',
+    description: 'High contrast inverted price box.',
+    fields: [
+      { name: 'product_name', label: 'Product', type: 'text', default: 'Sale Item' },
+      { name: 'old_price', label: 'Old Price', type: 'text', default: '29.99' },
+      { name: 'new_price', label: 'New Price', type: 'text', default: '19.99' },
+      { name: 'currency', label: 'Currency', type: 'text', default: '$' },
+    ],
+  },
+  {
+    id: 'asset_tag',
+    category: 'Dedicated',
+    name: 'IT Asset Tag',
+    description: 'Header bar, QR code, and details.',
+    fields: [
+      { name: 'department', label: 'Department', type: 'text', default: 'IT DEPT' },
+      { name: 'asset_id', label: 'Asset ID', type: 'text', default: 'AST-0001' },
+      { name: 'description', label: 'Description', type: 'text', default: 'Laptop Computer' },
+    ],
+  },
+  {
+    id: 'spice_jar',
+    category: 'Dedicated',
+    name: 'Pantry / Spice Jar',
+    description: 'Elegant typography for home organization.',
+    fields: [
+      {
+        name: 'style',
+        label: 'Design Style',
+        type: 'select',
+        options: [
+          { label: 'Apothecary (Classic)', value: 'jar_apothecary' },
+          { label: 'Farmhouse (Stripes & Clean)', value: 'jar_farmhouse' },
+        ],
+        default: 'jar_apothecary',
+      },
+      { name: 'title', label: 'Main Label', type: 'text', default: 'BASIL' },
+      { name: 'subtitle', label: 'Subtitle / Details', type: 'text', default: 'Sweet & Aromatic' },
+      { name: 'text', label: 'Top Text (e.g. Premium)', type: 'text', default: 'PREMIUM' },
+    ],
   },
   {
     id: 'expiration_date',
@@ -173,6 +264,16 @@ html, body {
   align-items: center;
   justify-content: center;
 }
+.catlabel-code {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
 `;
 
 const escapeHtml = (value = '') => String(value)
@@ -197,6 +298,9 @@ const LEGACY_FIELD_NAMES = [
   'title',
   'subtitle',
   'custom_html',
+  'icon_src',
+  'direction',
+  'data',
   'currency_symbol',
   'price_main',
   'price_cents',
@@ -205,10 +309,17 @@ const LEGACY_FIELD_NAMES = [
   'barcode',
   'department',
   'sku',
+  'code_type',
   'code_data',
   'service',
   'sender',
   'recipient',
+  'old_price',
+  'new_price',
+  'currency',
+  'asset_id',
+  'description',
+  'style',
   'exp_date',
   'made_date',
 ];
@@ -243,6 +354,43 @@ const resolveTemplateParams = (item = {}, record = {}) => {
   return resolvedParams;
 };
 
+const DEFAULT_ICON_SRC = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTIgMiAxNS4wOSA4LjI2IDIyIDkuMjcgMTcgMTQuMTQgMTguMTggMjEuMDIgMTIgMTcuNzcgNS44MiAyMS4wMiA3IDE0LjE0IDIgOS4yNyA4LjkxIDguMjYgMTIgMiI+PC9wb2x5Z29uPjwvc3ZnPg==';
+
+const buildJarApothecaryMarkup = ({ text = '', title = '', subtitle = '' }) => `
+  <div class="label-canvas-container apothecary">
+    <div class="inner">
+      <div style="font-size: 16cqh; letter-spacing: 4px; font-weight: 700; margin-bottom: auto;">${text || 'PREMIUM'}</div>
+      <div class="auto-text-wrapper" style="flex: 2; margin: 8cqmin 0;">
+        <div class="auto-text" style="font-weight: 900; text-transform: uppercase; font-family: serif;">${title || ''}</div>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: center; gap: 8px; margin: 8cqmin 0;">
+        <div style="height: 2px; background: black; width: 40px;"></div>
+        <span style="font-size: 16cqh;">✧</span>
+        <div style="height: 2px; background: black; width: 40px;"></div>
+      </div>
+      <div class="auto-text-wrapper" style="flex: 1;">
+        <div class="auto-text" style="font-style: italic; font-weight: bold; font-family: serif;">${subtitle || ''}</div>
+      </div>
+    </div>
+  </div>
+`;
+
+const buildJarFarmhouseMarkup = ({ title = '', subtitle = '' }) => `
+  <div class="label-canvas-container farmhouse">
+    <div class="stripes"></div>
+    <div style="flex: 1; display: flex; flex-direction: column; align-items: center; padding: 6cqmin; text-align: center;">
+      <div class="auto-text-wrapper" style="flex: 2; width: 100%;">
+        <div class="auto-text" style="font-weight: 900; text-transform: uppercase; font-style: italic; font-family: serif;">${title || ''}</div>
+      </div>
+      <div style="width: 100%; height: 4px; background: black; margin: 12cqmin 0;"></div>
+      <div class="auto-text-wrapper" style="width: 100%; flex: 1;">
+        <div class="auto-text" style="font-weight: bold; letter-spacing: 4px; text-transform: uppercase;">${subtitle || ''}</div>
+      </div>
+    </div>
+    <div class="stripes bottom"></div>
+  </div>
+`;
+
 export const buildLabelTemplateMarkup = (item = {}, record = {}) => {
   const templateId = item.template_id || 'centered_text';
   const p = resolveTemplateParams(item, record);
@@ -264,22 +412,191 @@ export const buildLabelTemplateMarkup = (item = {}, record = {}) => {
           </div>
         </div>`;
 
-    case 'price_tag': {
-      const unitHtml = p.unit ? `<span style="font-size:0.4em; margin-left:4px;">${p.unit}</span>` : '';
+    case 'icon_text': {
+      const isRow = p.direction !== 'col';
+      const iconSrc = p.icon_src || DEFAULT_ICON_SRC;
+
       return `
-        <div class="label-canvas-container" style="display:flex; flex-direction:column; padding:12px;">
-          <div class="bound-box" style="flex:4;">
-            <div class="auto-text" style="font-weight:900; display:flex; flex-direction:row; align-items:baseline;">
-              <span>${p.currency_symbol || ''}${p.price_main || ''}</span>
-              <span style="font-size:0.5em; vertical-align:super;">${p.price_cents || ''}</span>
-              ${unitHtml}
-            </div>
+        <div class="label-canvas-container" style="display:flex; flex-direction:${isRow ? 'row' : 'column'}; padding:12px; gap:12px; align-items:center; justify-content:center;">
+          <div style="${isRow ? 'width:40%; max-width:40%; height:100%;' : 'width:100%; height:40%; max-height:40%;'} min-width:0; min-height:0; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+            <img src="${iconSrc}" style="${isRow ? 'height:100%; max-width:100%;' : 'width:100%; max-height:100%;'} object-fit:contain;" />
           </div>
-          <div class="bound-box" style="flex:2; border-top:4px solid black; padding-top:6px; margin-top:6px;">
-            <div class="auto-text" style="font-weight:800; text-transform:uppercase;">${p.product_name || ''}</div>
+          <div class="bound-box" style="align-items:${isRow ? 'flex-start' : 'center'}; justify-content:center;">
+            <div class="auto-text" style="font-weight:900; text-align:${isRow ? 'left' : 'center'};">${p.text || ''}</div>
           </div>
         </div>`;
     }
+
+    case 'qr_text': {
+      const qrHtml = p.data
+        ? `<div class="catlabel-code" data-type="qrcode" data-value="${p.data}"></div>`
+        : '';
+
+      if (!qrHtml) {
+        return `
+          <div class="label-canvas-container" style="padding:12px;">
+            <div class="bound-box">
+              <div class="auto-text" style="font-weight:900;">${p.text || ''}</div>
+            </div>
+          </div>`;
+      }
+
+      if (isLandscape) {
+        return `
+          <div class="label-canvas-container" style="display:flex; flex-direction:row; padding:12px; gap:12px;">
+            <div style="flex:4; min-width:0; min-height:0; display:flex; align-items:center; justify-content:center;">
+              ${qrHtml}
+            </div>
+            <div class="bound-box" style="flex:6;">
+              <div class="auto-text" style="font-weight:900;">${p.text || ''}</div>
+            </div>
+          </div>`;
+      }
+
+      return `
+        <div class="label-canvas-container" style="display:flex; flex-direction:column; padding:12px; gap:12px;">
+          <div style="flex:6; min-width:0; min-height:0; display:flex; align-items:center; justify-content:center;">
+            ${qrHtml}
+          </div>
+          <div class="bound-box" style="flex:4;">
+            <div class="auto-text" style="font-weight:900;">${p.text || ''}</div>
+          </div>
+        </div>`;
+    }
+
+    case 'price_tag': {
+      const unitHtml = p.unit ? `<span style="font-size:0.4em; margin-left:4px;">${p.unit}</span>` : '';
+      const barcodeHtml = p.barcode
+        ? `<div class="catlabel-code" data-type="barcode" data-format="code128" data-value="${p.barcode}"></div>`
+        : '';
+
+      if (isLandscape && barcodeHtml) {
+        return `
+          <div class="label-canvas-container" style="display:flex; flex-direction:row; padding:12px; gap:12px;">
+            <div style="flex:6.5; display:flex; flex-direction:column; min-width:0; min-height:0;">
+              <div class="bound-box" style="flex:4;">
+                <div class="auto-text" style="font-weight:900; display:flex; flex-direction:row; align-items:baseline;">
+                  <span>${p.currency_symbol || ''}${p.price_main || ''}</span>
+                  <span style="font-size:0.5em; vertical-align:super;">${p.price_cents || ''}</span>
+                  ${unitHtml}
+                </div>
+              </div>
+              <div class="bound-box" style="flex:2; border-top:4px solid black; padding-top:6px; margin-top:6px;">
+                <div class="auto-text" style="font-weight:800; text-transform:uppercase;">${p.product_name || ''}</div>
+              </div>
+            </div>
+            <div style="flex:3.5; min-width:0; min-height:0; display:flex; align-items:center; justify-content:center;">
+              ${barcodeHtml}
+            </div>
+          </div>`;
+      }
+
+      return `
+        <div class="label-canvas-container" style="display:flex; flex-direction:column; padding:12px; gap:8px;">
+          <div style="flex:${barcodeHtml ? 6.5 : 1}; display:flex; flex-direction:column; min-width:0; min-height:0;">
+            <div class="bound-box" style="flex:4;">
+              <div class="auto-text" style="font-weight:900; display:flex; flex-direction:row; align-items:baseline;">
+                <span>${p.currency_symbol || ''}${p.price_main || ''}</span>
+                <span style="font-size:0.5em; vertical-align:super;">${p.price_cents || ''}</span>
+                ${unitHtml}
+              </div>
+            </div>
+            <div class="bound-box" style="flex:2; border-top:4px solid black; padding-top:6px; margin-top:6px;">
+              <div class="auto-text" style="font-weight:800; text-transform:uppercase;">${p.product_name || ''}</div>
+            </div>
+          </div>
+          ${barcodeHtml ? `<div style="flex:3.5; min-width:0; min-height:0; display:flex; align-items:center; justify-content:center;">${barcodeHtml}</div>` : ''}
+        </div>`;
+    }
+
+    case 'inventory_tag': {
+      const codeType = p.code_type === 'barcode' ? 'barcode' : 'qrcode';
+      const codeHtml = p.code_data
+        ? `<div class="catlabel-code" data-type="${codeType}" data-format="code128" data-value="${p.code_data}"></div>`
+        : '';
+
+      if (isLandscape && codeHtml) {
+        return `
+          <div class="label-canvas-container" style="display:flex; flex-direction:row; padding:12px; gap:12px; align-items:center;">
+            <div style="flex:3.5; min-width:0; min-height:0; display:flex; align-items:center; justify-content:center; height:100%;">
+              ${codeHtml}
+            </div>
+            <div style="flex:6.5; min-width:0; min-height:0; display:flex; flex-direction:column; height:100%; gap:6px;">
+              <div class="bound-box" style="flex:1; background:black; color:white; border-radius:4px;">
+                <div class="auto-text" style="font-weight:900; letter-spacing:2px;">${p.department || ''}</div>
+              </div>
+              <div class="bound-box" style="flex:2; justify-content:flex-start;">
+                <div class="auto-text" style="font-weight:800; text-align:left;">${p.title || ''}</div>
+              </div>
+              <div class="bound-box" style="flex:1; justify-content:flex-start;">
+                <div class="auto-text" style="font-weight:600; font-family:monospace; text-align:left;">${p.sku || ''}</div>
+              </div>
+            </div>
+          </div>`;
+      }
+
+      if (isLandscape) {
+        return `
+          <div class="label-canvas-container" style="display:flex; flex-direction:column; padding:12px; gap:6px;">
+            <div class="bound-box" style="flex:1; background:black; color:white; border-radius:4px;">
+              <div class="auto-text" style="font-weight:900; letter-spacing:2px;">${p.department || ''}</div>
+            </div>
+            <div class="bound-box" style="flex:2; justify-content:flex-start;">
+              <div class="auto-text" style="font-weight:800; text-align:left;">${p.title || ''}</div>
+            </div>
+            <div class="bound-box" style="flex:1; justify-content:flex-start;">
+              <div class="auto-text" style="font-weight:600; font-family:monospace; text-align:left;">${p.sku || ''}</div>
+            </div>
+          </div>`;
+      }
+
+      return `
+        <div class="label-canvas-container" style="display:flex; flex-direction:column; padding:8px; text-align:center; gap:6px;">
+          <div class="bound-box" style="flex:1.5; background:black; color:white; min-height:20%;">
+            <div class="auto-text" style="font-weight:900; letter-spacing:2px;">${p.department || ''}</div>
+          </div>
+          ${codeHtml ? `<div style="flex:4; min-width:0; min-height:0; display:flex; align-items:center; justify-content:center; padding:4px;">${codeHtml}</div>` : ''}
+          <div class="bound-box" style="flex:2;">
+            <div class="auto-text" style="font-weight:800; line-height:1;">${p.title || ''}</div>
+          </div>
+          <div class="bound-box" style="flex:1;">
+            <div class="auto-text" style="font-weight:600; font-family:monospace;">${p.sku || ''}</div>
+          </div>
+        </div>`;
+    }
+
+    case 'cable_flag':
+      if (isLandscape) {
+        return `
+          <div class="label-canvas-container" style="position:relative; display:flex; flex-direction:row; padding:0;">
+            <div style="position:absolute; top:0; bottom:0; left:50%; border-left:3px dashed black; transform:translateX(-50%);"></div>
+            <div style="flex:1; min-width:0; min-height:0; padding:12px; display:flex;">
+              <div class="bound-box">
+                <div class="auto-text" style="font-weight:900;">${p.text || ''}</div>
+              </div>
+            </div>
+            <div style="flex:1; min-width:0; min-height:0; padding:12px; display:flex;">
+              <div class="bound-box">
+                <div class="auto-text" style="font-weight:900;">${p.text || ''}</div>
+              </div>
+            </div>
+          </div>`;
+      }
+
+      return `
+        <div class="label-canvas-container" style="position:relative; display:flex; flex-direction:column; padding:0;">
+          <div style="position:absolute; left:0; right:0; top:50%; border-top:3px dashed black; transform:translateY(-50%);"></div>
+          <div style="flex:1; min-width:0; min-height:0; padding:12px; display:flex;">
+            <div class="bound-box">
+              <div class="auto-text" style="font-weight:900;">${p.text || ''}</div>
+            </div>
+          </div>
+          <div style="flex:1; min-width:0; min-height:0; padding:12px; display:flex;">
+            <div class="bound-box">
+              <div class="auto-text" style="font-weight:900;">${p.text || ''}</div>
+            </div>
+          </div>
+        </div>`;
 
     case 'shipping_address':
       if (isLandscape) {
@@ -328,35 +645,6 @@ export const buildLabelTemplateMarkup = (item = {}, record = {}) => {
           </div>
         </div>`;
 
-    case 'inventory_tag':
-      if (isLandscape) {
-        return `
-          <div class="label-canvas-container" style="display:flex; flex-direction:column; padding:12px; gap:6px;">
-            <div class="bound-box" style="flex:1; background:black; color:white; border-radius:4px;">
-              <div class="auto-text" style="font-weight:900; letter-spacing:2px;">${p.department || ''}</div>
-            </div>
-            <div class="bound-box" style="flex:2; justify-content:flex-start;">
-              <div class="auto-text" style="font-weight:800; text-align:left;">${p.title || ''}</div>
-            </div>
-            <div class="bound-box" style="flex:1; justify-content:flex-start;">
-              <div class="auto-text" style="font-weight:600; font-family:monospace; text-align:left;">${p.sku || ''}</div>
-            </div>
-          </div>`;
-      }
-
-      return `
-        <div class="label-canvas-container" style="display:flex; flex-direction:column; padding:8px; text-align:center; gap:8px;">
-          <div class="bound-box" style="flex:1; background:black; color:white;">
-            <div class="auto-text" style="font-weight:900; letter-spacing:2px;">${p.department || ''}</div>
-          </div>
-          <div class="bound-box" style="flex:2;">
-            <div class="auto-text" style="font-weight:800;">${p.title || ''}</div>
-          </div>
-          <div class="bound-box" style="flex:1;">
-            <div class="auto-text" style="font-weight:600; font-family:monospace;">${p.sku || ''}</div>
-          </div>
-        </div>`;
-
     case 'warning_banner':
       return `
         <div class="label-canvas-container" style="background:black; color:white; padding:16px;">
@@ -364,6 +652,92 @@ export const buildLabelTemplateMarkup = (item = {}, record = {}) => {
             <div class="auto-text" style="font-weight:900; text-transform:uppercase; letter-spacing:4px;">${p.text || ''}</div>
           </div>
         </div>`;
+
+    case 'sale_tag':
+      if (isLandscape) {
+        return `
+          <div class="label-canvas-container" style="display:flex; flex-direction:row;">
+            <div style="flex:1; padding:12px; display:flex; flex-direction:column; justify-content:center; align-items:flex-start;">
+              <div class="bound-box" style="flex:1; align-items:flex-end; justify-content:flex-start;">
+                <div class="auto-text" style="font-weight:700; text-align:left;">${p.product_name || ''}</div>
+              </div>
+              <div class="bound-box" style="flex:1; align-items:flex-start; justify-content:flex-start; margin-top:4px;">
+                <div class="auto-text" style="font-weight:900; text-decoration:line-through; color:#666; text-align:left;">${p.currency || ''}${p.old_price || ''}</div>
+              </div>
+            </div>
+            <div style="flex:1; background:black; color:white; display:flex; align-items:center; justify-content:center; padding:16px;">
+              <div class="bound-box">
+                <div class="auto-text" style="font-weight:900;">${p.currency || ''}${p.new_price || ''}</div>
+              </div>
+            </div>
+          </div>`;
+      }
+
+      return `
+        <div class="label-canvas-container" style="display:flex; flex-direction:column;">
+          <div style="flex:1; padding:8px; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
+            <div class="bound-box" style="flex:1;">
+              <div class="auto-text" style="font-weight:700;">${p.product_name || ''}</div>
+            </div>
+            <div class="bound-box" style="flex:1; margin-top:4px;">
+              <div class="auto-text" style="font-weight:900; text-decoration:line-through; color:#666;">${p.currency || ''}${p.old_price || ''}</div>
+            </div>
+          </div>
+          <div style="flex:1; background:black; color:white; display:flex; align-items:center; justify-content:center; padding:12px;">
+            <div class="bound-box">
+              <div class="auto-text" style="font-weight:900;">${p.currency || ''}${p.new_price || ''}</div>
+            </div>
+          </div>
+        </div>`;
+
+    case 'asset_tag': {
+      const codeHtml = p.asset_id
+        ? `<div class="catlabel-code" data-type="qrcode" data-value="${p.asset_id}"></div>`
+        : '';
+
+      if (isLandscape && codeHtml) {
+        return `
+          <div class="label-canvas-container" style="display:flex; flex-direction:column; padding:8px; gap:8px;">
+            <div class="bound-box" style="flex:1.4; background:black; color:white;">
+              <div class="auto-text" style="font-weight:900; letter-spacing:2px;">${p.department || ''}</div>
+            </div>
+            <div style="flex:4.6; min-width:0; min-height:0; display:flex; gap:8px;">
+              <div style="flex:3.5; min-width:0; min-height:0; display:flex; align-items:center; justify-content:center;">
+                ${codeHtml}
+              </div>
+              <div style="flex:6.5; min-width:0; min-height:0; display:flex; flex-direction:column; gap:4px;">
+                <div class="bound-box" style="flex:2; justify-content:flex-start;">
+                  <div class="auto-text" style="font-weight:900; text-align:left;">${p.asset_id || ''}</div>
+                </div>
+                <div class="bound-box" style="flex:1; justify-content:flex-start;">
+                  <div class="auto-text" style="font-weight:500; font-style:italic; text-align:left;">${p.description || ''}</div>
+                </div>
+              </div>
+            </div>
+          </div>`;
+      }
+
+      return `
+        <div class="label-canvas-container" style="display:flex; flex-direction:column; padding:8px; gap:8px;">
+          <div class="bound-box" style="flex:1.2; background:black; color:white;">
+            <div class="auto-text" style="font-weight:900; letter-spacing:2px;">${p.department || ''}</div>
+          </div>
+          ${codeHtml ? `<div style="flex:4; min-width:0; min-height:0; display:flex; align-items:center; justify-content:center;">${codeHtml}</div>` : ''}
+          <div class="bound-box" style="flex:2;">
+            <div class="auto-text" style="font-weight:900;">${p.asset_id || ''}</div>
+          </div>
+          <div class="bound-box" style="flex:1;">
+            <div class="auto-text" style="font-weight:500; font-style:italic;">${p.description || ''}</div>
+          </div>
+        </div>`;
+    }
+
+    case 'spice_jar': {
+      const style = p.style === 'jar_farmhouse' ? 'jar_farmhouse' : 'jar_apothecary';
+      return style === 'jar_farmhouse'
+        ? buildJarFarmhouseMarkup(p)
+        : buildJarApothecaryMarkup(p);
+    }
 
     case 'expiration_date': {
       const htmlParts = [];
@@ -423,39 +797,10 @@ export const buildLabelTemplateMarkup = (item = {}, record = {}) => {
         </div>`;
 
     case 'jar_apothecary':
-      return `
-        <div class="label-canvas-container" style="padding:12px;">
-          <div style="border:4px solid black; outline:2px solid black; outline-offset:-8px; width:100%; height:100%; display:flex; flex-direction:column; padding:16px; text-align:center;">
-            <div style="font-size:16px; letter-spacing:4px; font-weight:700; margin-bottom:auto;">${p.text || 'PREMIUM'}</div>
-            <div class="bound-box" style="flex:2; margin:12px 0;">
-              <div class="auto-text" style="font-weight:900; text-transform:uppercase; font-family:serif;">${p.title || ''}</div>
-            </div>
-            <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin:12px 0;">
-              <div style="height:2px; background:black; width:40px;"></div>
-              <span style="font-size:16px;">✧</span>
-              <div style="height:2px; background:black; width:40px;"></div>
-            </div>
-            <div class="bound-box" style="flex:1;">
-              <div class="auto-text" style="font-style:italic; font-weight:bold; font-family:serif;">${p.subtitle || ''}</div>
-            </div>
-          </div>
-        </div>`;
+      return buildJarApothecaryMarkup(p);
 
     case 'jar_farmhouse':
-      return `
-        <div class="label-canvas-container" style="display:flex; flex-direction:column; border:6px solid black;">
-          <div style="height:15%; background:repeating-linear-gradient(45deg, transparent, transparent 4px, black 4px, black 8px); border-bottom:4px solid black;"></div>
-          <div style="flex:1; display:flex; flex-direction:column; align-items:center; padding:16px; text-align:center;">
-            <div class="bound-box" style="flex:2; width:100%;">
-              <div class="auto-text" style="font-weight:900; text-transform:uppercase; font-style:italic; font-family:serif;">${p.title || ''}</div>
-            </div>
-            <div style="width:100%; height:4px; background:black; margin:16px 0;"></div>
-            <div class="bound-box" style="width:100%; flex:1;">
-              <div class="auto-text" style="font-weight:bold; letter-spacing:4px; text-transform:uppercase;">${p.subtitle || ''}</div>
-            </div>
-          </div>
-          <div style="height:15%; background:repeating-linear-gradient(45deg, transparent, transparent 4px, black 4px, black 8px); border-top:4px solid black;"></div>
-        </div>`;
+      return buildJarFarmhouseMarkup(p);
 
     case 'centered_text':
     default:

@@ -36,84 +36,21 @@ export default function TemplateWizardModal({ template, onClose }) {
   const handleGenerate = () => {
     clearCanvas();
 
-    const isLandscape = canvasWidth > canvasHeight;
     const baseId = `template-${Date.now()}`;
-    const hasPriceTagCode = template.id === 'price_tag' && Boolean(String(formData.barcode || '').trim());
-    const hasInventoryCode = template.id === 'inventory_tag' && Boolean(String(formData.code_data || '').trim());
 
-    if (hasPriceTagCode || hasInventoryCode) {
-      let htmlW = canvasWidth;
-      let htmlH = canvasHeight;
-      let codeX = 0;
-      let codeY = 0;
-      let codeW = 0;
-      let codeH = 0;
-
-      if (isLandscape) {
-        htmlW = Math.max(5, Math.round(canvasWidth * 0.65));
-        codeW = Math.max(5, canvasWidth - htmlW - 24);
-        codeH = Math.max(5, canvasHeight - 32);
-        codeX = htmlW + 8;
-        codeY = 16;
-      } else {
-        htmlH = Math.max(5, Math.round(canvasHeight * 0.65));
-        codeW = Math.max(5, canvasWidth - 32);
-        codeH = Math.max(5, canvasHeight - htmlH - 24);
-        codeX = 16;
-        codeY = htmlH + 8;
-      }
-
-      const codeType = hasInventoryCode ? 'qrcode' : 'barcode';
-      const codeData = hasInventoryCode ? formData.code_data : formData.barcode;
-
-      setItems([
-        {
-          id: baseId,
-          type: 'group',
-          x: 0,
-          y: 0,
-          width: canvasWidth,
-          height: canvasHeight,
-          pageIndex: 0,
-          children: [
-            {
-              id: `${baseId}-html`,
-              type: 'label_template',
-              template_id: template.id,
-              params: formData,
-              x: 0,
-              y: 0,
-              width: htmlW,
-              height: htmlH,
-            },
-            {
-              id: `${baseId}-code`,
-              type: codeType,
-              barcode_type: 'code128',
-              data: codeData,
-              x: codeX,
-              y: codeY,
-              width: codeW,
-              height: codeH,
-            },
-          ],
-        },
-      ]);
-    } else {
-      setItems([
-        {
-          id: baseId,
-          type: 'label_template',
-          template_id: template.id,
-          params: formData,
-          x: 0,
-          y: 0,
-          width: canvasWidth,
-          height: canvasHeight,
-          pageIndex: 0,
-        },
-      ]);
-    }
+    setItems([
+      {
+        id: baseId,
+        type: 'label_template',
+        template_id: template.id,
+        params: formData,
+        x: 0,
+        y: 0,
+        width: canvasWidth,
+        height: canvasHeight,
+        pageIndex: 0,
+      },
+    ]);
 
     onClose();
   };

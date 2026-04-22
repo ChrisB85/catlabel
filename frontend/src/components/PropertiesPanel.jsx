@@ -132,13 +132,7 @@ const ToggleBtn = ({ icon: Icon, active, onClick, label }) => (
 export default function PropertiesPanel() {
   const { items, selectedId, updateItem, deleteItem, canvasWidth, canvasHeight, canvasBorder, setCanvasBorder, canvasBorderThickness, setCanvasBorderThickness, setCanvasSize, getMmToPx, getPxToMm, settings, updateSettingsAPI, fonts, uploadFont, isRotated, setIsRotated, splitMode, setSplitMode, printerProfile, selectedPrinter, selectedPrinterInfo, batchRecords, setBatchRecords, updateBatchRecord, addBatchRecord, removeBatchRecord, generateBatchMatrix, generateBatchSequence, designMode, setDesignMode, htmlContent, setHtmlContent } = useStore();
   const selectedItem = items.find(i => i.id === selectedId);
-  const selectedTemplateChild = selectedItem?.type === 'group'
-    ? (selectedItem.children || []).find((child) => child.type === 'label_template')
-    : null;
-  const selectedTemplateItem = selectedItem?.type === 'label_template' ? selectedItem : selectedTemplateChild;
-  const selectedTemplateCodeChild = selectedItem?.type === 'group'
-    ? (selectedItem.children || []).find((child) => child.type === 'barcode' || child.type === 'qrcode')
-    : null;
+  const selectedTemplateItem = selectedItem?.type === 'label_template' ? selectedItem : null;
   const isPreCut = selectedPrinterInfo?.media_type === 'pre-cut';
   const pInfo = selectedPrinterInfo || {};
   const caps = pInfo.capabilities || {};
@@ -153,6 +147,7 @@ export default function PropertiesPanel() {
   const [activeTab, setActiveTab] = useState('canvas');
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
+  const [templateIconField, setTemplateIconField] = useState(null);
   const [dataMode, setDataMode] = useState('table');
   const [matrixInputs, setMatrixInputs] = useState({});
   const [seqInputs, setSeqInputs] = useState({ varName: '', start: 1, end: 10, prefix: '', suffix: '', padding: 3 });
@@ -335,25 +330,9 @@ export default function PropertiesPanel() {
     setTimeout(() => setIsSaving(false), 1500);
   };
 
-  const updateSelectedTemplate = (templateChanges, codeChanges = null) => {
+  const updateSelectedTemplate = (templateChanges) => {
     if (!selectedItem || !selectedTemplateItem) return;
-
-    if (selectedItem.type === 'label_template') {
-      updateItem(selectedId, templateChanges);
-      return;
-    }
-
-    updateItem(selectedId, {
-      children: (selectedItem.children || []).map((child) => {
-        if (child.id === selectedTemplateItem.id) {
-          return { ...child, ...templateChanges };
-        }
-        if (codeChanges && selectedTemplateCodeChild && child.id === selectedTemplateCodeChild.id) {
-          return { ...child, ...codeChanges };
-        }
-        return child;
-      })
-    });
+    updateItem(selectedId, templateChanges);
   };
 
   // Restrict one axis strictly to the hardware print width, letting the feed axis grow infinitely.
@@ -922,15 +901,35 @@ export default function PropertiesPanel() {
                             ...params,
                             [field.name]: nextValue
                           };
-                          const shouldSyncCode = field.name === 'barcode' || field.name === 'code_data';
-
-                          updateSelectedTemplate(
-                            { params: nextParams },
-                            shouldSyncCode && selectedTemplateCodeChild
-                              ? { data: nextValue }
-                              : null
-                          );
+                          updateSelectedTemplate({ params: nextParams });
                         };
+
+                        if (field.type === 'icon') {
+                          return (
+                            <div key={field.name}>
+                              <label className={labelClass}>{field.label}</label>
+                              <div className="flex items-center gap-3 mb-3">
+                                {value ? (
+                                  <img
+                                    src={value}
+                                    alt={field.label}
+                                    className="w-10 h-10 object-contain bg-white border border-neutral-300 dark:border-neutral-700 p-1 rounded"
+                                  />
+                                ) : (
+                                  <div className="w-10 h-10 bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded flex items-center justify-center text-[10px] text-neutral-400">
+                                    None
+                                  </div>
+                                )}
+                                <button
+                                  onClick={() => setTemplateIconField(field.name)}
+                                  className="px-3 py-1.5 bg-neutral-100 dark:bg-neutral-800 text-xs font-bold uppercase tracking-wider hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors dark:text-white rounded"
+                                >
+                                  Choose Icon
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        }
 
                         if (field.type === 'textarea' || field.name === 'custom_html') {
                           return (
@@ -1406,6 +1405,20 @@ export default function PropertiesPanel() {
             updateItem(selectedId, { icon_src: b64 });
             setShowIconPicker(false);
           }} 
+        />
+      )}
+      {templateIconField && selectedTemplateItem && (
+        <IconPicker
+          onClose={() => setTemplateIconField(null)}
+          onSelect={(b64) => {
+            updateSelectedTemplate({
+              params: {
+                ...(selectedTemplateItem.params || {}),
+                [templateIconField]: b64
+              }
+            });
+            setTemplateIconField(null);
+          }}
         />
       )}
     </div>
