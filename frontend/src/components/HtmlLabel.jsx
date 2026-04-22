@@ -83,7 +83,6 @@ export default function HtmlLabel({
       <div
         ref={containerRef}
         style={{ width: '100%', height: '100%' }}
-        dangerouslySetInnerHTML={{ __html: processedHtml }}
       />
       {canvasBorder === 'box' && (
         <div
