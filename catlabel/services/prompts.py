@@ -27,20 +27,38 @@ AVAILABLE PRESETS (Use apply_preset):
 AVAILABLE TEMPLATES (Use apply_template):
 {templates_json}
 
-STYLING & HTML MODE (FOR CREATIVE DESIGNS):
-- Use `set_html_design` for complex, highly styled layouts (vintage borders, CSS grids, flexbox).
+======================================================================
+CRITICAL HTML/CSS LAYOUT RULES (FOR CUSTOM DESIGNS)
+======================================================================
+We use a custom "3-Pass Rendering Pipeline" to guarantee text auto-scales perfectly. You MUST follow this exact DOM structure for all text and barcodes:
 
-CRITICAL AUTO-SCALING TEXT RULES (READ CAREFULLY):
-You do NOT need to guess font sizes! To make text automatically shrink or grow to perfectly fill its container, assign the `auto-text` class to the PARENT container.
-✅ CORRECT: <div class="auto-text"><h1>{{{{ main_title }}}}</h1><p>{{{{ subtitle }}}}</p></div>
-❌ WRONG: <div class="auto-text" style="font-size: 14px;">Text</div> (NEVER set font-size explicitly!)
+1. Create a Flexbox container to divide the layout space (e.g., `<div style="display: flex; gap: 4px;">`).
+2. Every item MUST be wrapped in a `<div class="bound-box">`. You assign flex properties directly to the bound-box (e.g., `<div class="bound-box" style="flex: 1;">`).
+3. Inside the bound-box, place `<div class="auto-text">`.
+4. Place your text or {{{{ variables }}}} inside the auto-text div.
 
-RULES FOR `.auto-text` TO WORK PROPERLY:
-1. The parent element MUST have strict physical boundaries (fixed width/height).
-2. If using CSS Grid or Flexbox, you MUST add `min-width: 0; min-height: 0; overflow: hidden;` to the parent cell so it bounds the text instead of stretching.
-3. DO NOT set `font-size` explicitly (e.g. `14px`) on or inside `.auto-text`! The system calculates it. Use semantic tags like `<h1>` or `<small>` to create relative hierarchy.
-4. The system automatically strips margins from children of `.auto-text` to measure them accurately. Use standard CSS `gap` on the parent if you need structural spacing.
-5. WRAPPING vs SINGLE-LINE: By default `.auto-text` wraps text over multiple lines. To force text to shrink onto a single line without wrapping, use `<div class="auto-text" style="white-space: nowrap;">`.
+✅ CORRECT STRUCTURE:
+<div style="display: flex; flex-direction: column; height: 100%; padding: 4px; gap: 4px;">
+    <div class="bound-box" style="flex: 2;">
+        <div class="auto-text" style="font-weight: 900; white-space: nowrap;">{{{{ title }}}}</div>
+    </div>
+    <div class="bound-box" style="flex: 1;">
+        <div class="auto-text">{{{{ subtitle }}}}</div>
+    </div>
+</div>
+
+❌ WRONG (Will break the rendering engine):
+- DO NOT put .auto-text directly inside a flex container without a .bound-box wrapper.
+- DO NOT apply `font-size` to .auto-text or its children (the engine calculates this dynamically!).
+- DO NOT use large paddings (e.g., 10px+). Thermal labels are tiny; use 0px to 4px padding maximum.
+
+WRAPPING vs SINGLE-LINE:
+By default, `.auto-text` wraps over multiple lines. To force the text to maximize its size on a SINGLE line, add `white-space: nowrap;` directly to the auto-text div.
+
+BARCODES & QR CODES:
+To insert a dynamic code, use our special div INSIDE a `.bound-box`. Set its parent bound-box flex ratio to control its size. Do NOT use <img> tags for barcodes.
+✅ CORRECT QR: `<div class="bound-box" style="flex: 1;"><div class="catlabel-code" data-type="qrcode" data-value="{{{{ id }}}}"></div></div>`
+✅ CORRECT BARCODE: `<div class="bound-box" style="flex: 1;"><div class="catlabel-code" data-type="barcode" data-format="code128" data-value="{{{{ upc }}}}"></div></div>`
 
 CRITICAL FONT RULES (MUST OBEY):
 1. NEVER import fonts from external sources (NO Google Fonts, NO `@import`, NO `<link>`).
