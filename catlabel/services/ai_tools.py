@@ -151,7 +151,7 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "set_html_design",
-            "description": "Switches to HTML Mode and designs the label using raw HTML/CSS. CRITICAL AUTO-SCALING: To make text dynamically scale to fit, wrap it exactly as <div class='auto-text'><h1>{{ var }}</h1></div>. The parent container MUST have strict CSS boundaries (use min-width: 0; min-height: 0; overflow: hidden; in grids/flexbox). Do NOT apply font-size to .auto-text or its children!",
+            "description": "Switches to HTML Mode and designs the label using raw HTML/CSS. CRITICAL AUTO-SCALING: To make text dynamically scale to fit, wrap it exactly as <div class='auto-text'><h1>{{ var }}</h1></div>. The parent container MUST have strict CSS boundaries (use min-width: 0; min-height: 0; overflow: hidden; in grids/flexbox) or flex proportions (e.g. flex: 1). By default, text will wrap over multiple lines to fill the box. If you want the text to aggressively shrink to fit on a SINGLE LINE without wrapping, add style='white-space: nowrap;' to the auto-text div: <div class='auto-text' style='white-space: nowrap;'>...</div>. Do NOT apply font-size to .auto-text or its children!",
             "parameters": {
                 "type": "object",
                 "properties": {

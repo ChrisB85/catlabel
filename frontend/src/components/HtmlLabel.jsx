@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { applyVars, processHtmlDynamicElements } from '../utils/rendering';
 import { useStore } from '../store';
 
@@ -22,23 +22,42 @@ export default function HtmlLabel({
   const fontFamily = defaultFont.split('.')[0];
   const processedHtml = applyVars(html || '', record);
   const borderThickness = Math.max(1, Number(canvasBorderThickness) || 4);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return undefined;
 
     let cancelled = false;
+    setIsReady(false);
+    container.innerHTML = processedHtml;
 
     const process = async () => {
-      await processHtmlDynamicElements(container, width, height);
+      try {
+        if (document.fonts?.ready) {
+          await document.fonts.ready;
+        }
+      } catch (error) {
+        console.warn('Font readiness check failed', error);
+      }
+
       if (cancelled) return;
-      requestAnimationFrame(() => {
+
+      await processHtmlDynamicElements(container, width, height, () => cancelled);
+
+      if (cancelled) return;
+
+      setIsReady(true);
+
+      if (onRenderComplete) {
         requestAnimationFrame(() => {
-          if (!cancelled && onRenderComplete) {
-            onRenderComplete();
-          }
+          requestAnimationFrame(() => {
+            if (!cancelled) {
+              onRenderComplete();
+            }
+          });
         });
-      });
+      }
     };
 
     process();
@@ -46,7 +65,7 @@ export default function HtmlLabel({
     return () => {
       cancelled = true;
     };
-  }, [processedHtml, width, height, onRenderComplete]);
+  }, [processedHtml, width, height, fontFamily, onRenderComplete]);
 
   return (
     <div
@@ -57,7 +76,8 @@ export default function HtmlLabel({
         position: 'relative',
         backgroundColor: 'white',
         color: 'black',
-        fontFamily: `'${fontFamily}', sans-serif`
+        fontFamily: `'${fontFamily}', sans-serif`,
+        opacity: isReady ? 1 : 0
       }}
     >
       <div

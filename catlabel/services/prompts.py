@@ -40,6 +40,7 @@ RULES FOR `.auto-text` TO WORK PROPERLY:
 2. If using CSS Grid or Flexbox, you MUST add `min-width: 0; min-height: 0; overflow: hidden;` to the parent cell so it bounds the text instead of stretching.
 3. DO NOT set `font-size` explicitly (e.g. `14px`) on or inside `.auto-text`! The system calculates it. Use semantic tags like `<h1>` or `<small>` to create relative hierarchy.
 4. The system automatically strips margins from children of `.auto-text` to measure them accurately. Use standard CSS `gap` on the parent if you need structural spacing.
+5. WRAPPING vs SINGLE-LINE: By default `.auto-text` wraps text over multiple lines. To force text to shrink onto a single line without wrapping, use `<div class="auto-text" style="white-space: nowrap;">`.
 
 CRITICAL FONT RULES (MUST OBEY):
 1. NEVER import fonts from external sources (NO Google Fonts, NO `@import`, NO `<link>`).

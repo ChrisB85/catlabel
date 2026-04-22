@@ -50,14 +50,22 @@ const useHtmlRasterizer = (htmlString, width, height, isTemplate = false, font =
     container.innerHTML = htmlString;
 
     const rasterize = async () => {
-      await processHtmlDynamicElements(container, width, height);
-
       try {
         if (document.fonts?.ready) {
           await document.fonts.ready;
         }
       } catch (error) {
         console.warn('Font readiness check failed', error);
+      }
+
+      if (cancelled) {
+        return;
+      }
+
+      await processHtmlDynamicElements(container, width, height, () => cancelled);
+
+      if (cancelled) {
+        return;
       }
 
       requestAnimationFrame(() => {

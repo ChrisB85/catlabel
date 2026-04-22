@@ -10,17 +10,18 @@ const loadInjectedImage = (src) => new Promise((resolve) => {
   image.src = src;
 });
 
-export const processHtmlDynamicElements = async (container, width, height) => {
+export const processHtmlDynamicElements = async (container, width, height, isCancelled) => {
   const codeEls = Array.from(container.querySelectorAll('.catlabel-code'));
 
   for (const el of codeEls) {
+    if (isCancelled && isCancelled()) return;
+
     const type = el.getAttribute('data-type');
     const format = el.getAttribute('data-format') || 'code128';
     const value = el.getAttribute('data-value') || '';
 
-    el.innerHTML = '';
-
     if (!value) {
+      el.innerHTML = '';
       continue;
     }
 
@@ -45,30 +46,63 @@ export const processHtmlDynamicElements = async (container, width, height) => {
         });
       }
 
-      if (!dataUrl) {
-        continue;
+      if (dataUrl) {
+        const image = await loadInjectedImage(dataUrl);
+        if (isCancelled && isCancelled()) return;
+
+        if (image) {
+          image.style.maxWidth = '100%';
+          image.style.maxHeight = '100%';
+          image.style.width = '100%';
+          image.style.height = '100%';
+          image.style.objectFit = 'contain';
+          el.replaceChildren(image);
+        }
       }
-
-      const image = await loadInjectedImage(dataUrl);
-      if (!image) {
-        continue;
-      }
-
-      image.style.maxWidth = '100%';
-      image.style.maxHeight = '100%';
-      image.style.width = '100%';
-      image.style.height = '100%';
-      image.style.objectFit = 'contain';
-
-      el.appendChild(image);
     } catch (error) {
       console.error('Failed to generate dynamic code element', error);
     }
   }
 
-  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  if (isCancelled && isCancelled()) return;
 
-  const autoTexts = container.querySelectorAll('.auto-text');
+  const imgEls = Array.from(container.querySelectorAll('img'));
+  await Promise.all(imgEls.map((img) => {
+    if (img.complete) return Promise.resolve();
+    return new Promise((resolve) => {
+      img.onload = resolve;
+      img.onerror = resolve;
+    });
+  }));
+
+  if (isCancelled && isCancelled()) return;
+
+  const autoTexts = Array.from(container.querySelectorAll('.auto-text'));
+
+  autoTexts.forEach((el) => {
+    el.style.fontSize = '1px';
+    el.style.lineHeight = '1';
+  });
+
+  container.offsetHeight;
+
+  autoTexts.forEach((el) => {
+    const parent = el.parentElement;
+    if (!parent) return;
+
+    const w = parent.clientWidth;
+    const h = parent.clientHeight;
+
+    parent.style.width = `${w}px`;
+    parent.style.height = `${h}px`;
+    parent.style.minWidth = `${w}px`;
+    parent.style.minHeight = `${h}px`;
+    parent.style.maxWidth = `${w}px`;
+    parent.style.maxHeight = `${h}px`;
+    parent.style.flex = 'none';
+  });
+
+  if (isCancelled && isCancelled()) return;
 
   autoTexts.forEach((el) => {
     const parent = el.parentElement;
@@ -77,20 +111,12 @@ export const processHtmlDynamicElements = async (container, width, height) => {
     const targetW = parent.clientWidth || width;
     const targetH = parent.clientHeight || height;
 
-    const origW = parent.style.width;
-    const origH = parent.style.height;
-    const origOverflow = parent.style.overflow;
-
-    parent.style.width = `${targetW}px`;
-    parent.style.height = `${targetH}px`;
-    parent.style.overflow = 'hidden';
+    if (!el.style.whiteSpace) el.style.whiteSpace = 'pre-wrap';
+    if (!el.style.wordBreak) el.style.wordBreak = 'break-word';
 
     let low = 4;
     let high = 500;
     let best = 4;
-
-    el.style.whiteSpace = 'pre-wrap';
-    el.style.wordBreak = 'break-word';
 
     while (high - low >= 0.5) {
       const mid = (low + high) / 2;
@@ -105,10 +131,6 @@ export const processHtmlDynamicElements = async (container, width, height) => {
     }
 
     el.style.fontSize = `${Math.floor(best)}px`;
-
-    parent.style.width = origW;
-    parent.style.height = origH;
-    parent.style.overflow = origOverflow;
   });
 };
 

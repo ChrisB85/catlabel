@@ -62,7 +62,7 @@ body {
 /* Hardened container for HTML label generation */
 .auto-text {
   display: inline-block;
-  width: 100%;
+  max-width: 100%;
   text-align: center;
   white-space: pre-wrap;
   word-break: break-word;
