@@ -13,7 +13,7 @@ import pypdfium2 as pdfium
 
 from ..core.database import create_db_and_tables, engine
 from ..core.models import Font, Settings, Address, LabelPreset, Project, Category
-from ..services.layout_engine import TEMPLATE_METADATA, generate_template_items
+from ..services.layout_engine import TEMPLATE_METADATA
 
 from .routes_print import router as print_router
 from .routes_project import router as project_router
@@ -273,13 +273,13 @@ def get_templates():
 
 @app.post("/api/templates/generate")
 def generate_template(req: TemplateGenerateRequest):
-    items = generate_template_items(req.template_id, req.width, req.height, req.params)
+    valid = any(template["id"] == req.template_id for template in TEMPLATE_METADATA)
 
-    if items is None:
+    if not valid:
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail=f"Unknown template_id: '{req.template_id}'")
 
-    return {"items": items}
+    return {"items": []}
 
 @app.post("/api/pdf/convert")
 async def convert_pdf(file: UploadFile = File(...)):

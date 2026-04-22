@@ -4,7 +4,7 @@ import Konva from 'konva';
 import { toPng } from 'html-to-image';
 import { applyVars, calculateAutoFitItem, computeOptimalTextSize, processHtmlDynamicElements, resolveDim, useCodeGenerator } from '../utils/rendering';
 import { useStore } from '../store';
-import { LABEL_TEMPLATE_STYLES, buildLabelTemplateMarkup } from './templateStyles';
+import { LABEL_TEMPLATE_STYLES } from './templateStyles';
 
 
 const useHtmlRasterizer = (htmlString, width, height, isTemplate = false, font = 'Arial') => {
@@ -272,7 +272,7 @@ export default function CanvasItemNode({
         x: resolvedX,
         y: resolvedY,
         rotation: activeItem.rotation || 0,
-        draggable: activeItem.type !== 'cut_line_indicator' && activeItem.type !== 'label_template',
+        draggable: activeItem.type !== 'cut_line_indicator',
         onMouseDown,
         onTouchStart,
         onDragMove,
@@ -429,17 +429,6 @@ export default function CanvasItemNode({
     );
   } else if (item.type === 'image') {
     element = <URLImage src={item.src} width={item.width} height={item.height} />;
-  } else if (item.type === 'label_template') {
-    const templateMarkup = buildLabelTemplateMarkup(item, record);
-    element = (
-      <RasterizedHtml
-        html={templateMarkup}
-        width={visualW}
-        height={approxHeight}
-        isTemplate
-        font={item.font || defaultFont}
-      />
-    );
   } else if (item.type === 'html') {
     element = (
       <RasterizedHtml

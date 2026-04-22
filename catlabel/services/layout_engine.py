@@ -1,6 +1,3 @@
-import uuid
-
-
 TEMPLATE_METADATA = [
     {
         "id": "centered_text",
@@ -160,26 +157,3 @@ TEMPLATE_METADATA = [
     },
 ]
 
-_TEMPLATE_IDS = {template["id"] for template in TEMPLATE_METADATA}
-
-
-def generate_template_items(template_id: str, width: int, height: int, params: dict):
-    """
-    Returns a single 'label_template' item that relies entirely on
-    the frontend's HTML/CSS DOM renderer.
-    """
-    if template_id not in _TEMPLATE_IDS:
-        return None
-
-    return [
-        {
-            "id": str(uuid.uuid4()),
-            "type": "label_template",
-            "template_id": template_id,
-            "params": params,
-            "x": 0,
-            "y": 0,
-            "width": int(width),
-            "height": int(height),
-        }
-    ]

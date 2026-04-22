@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { toPng } from 'html-to-image';
 import { calculateAutoFitItem } from './utils/rendering';
+import { buildLabelTemplateMarkup } from './components/templateStyles';
 
 const recalcAutoFit = (items, batchRecords, cw, ch) => {
   let changed = false;
@@ -17,6 +18,48 @@ const recalcAutoFit = (items, batchRecords, cw, ch) => {
   });
 
   return changed ? nextItems : items;
+};
+
+const buildTemplateHtml = (templateId, params = {}) =>
+  buildLabelTemplateMarkup({ template_id: templateId, params }, {});
+
+const normalizeCanvasState = (canvasState = {}) => {
+  const items = Array.isArray(canvasState.items) ? canvasState.items : [];
+  const activeTemplate = canvasState.activeTemplate;
+
+  if (activeTemplate?.id) {
+    return {
+      ...canvasState,
+      designMode: 'html',
+      activeTemplate: {
+        id: activeTemplate.id,
+        params: activeTemplate.params || {}
+      },
+      htmlContent: canvasState.htmlContent || buildTemplateHtml(activeTemplate.id, activeTemplate.params || {}),
+      items
+    };
+  }
+
+  const legacyTemplateItem = items.length === 1 && items[0]?.type === 'label_template'
+    ? items[0]
+    : null;
+
+  if (legacyTemplateItem) {
+    const templateId = legacyTemplateItem.template_id || 'centered_text';
+    const params = legacyTemplateItem.params || {};
+    return {
+      ...canvasState,
+      designMode: 'html',
+      activeTemplate: { id: templateId, params },
+      htmlContent: buildTemplateHtml(templateId, params),
+      items: []
+    };
+  }
+
+  return {
+    ...canvasState,
+    activeTemplate: null
+  };
 };
 
 const withHistory = (config) => {
@@ -42,7 +85,7 @@ const withHistory = (config) => {
       clearTimeout(historyTimeout);
       historyTimeout = setTimeout(() => {
         const finalState = get();
-        const relevantKeys = ['items', 'canvasWidth', 'canvasHeight', 'isRotated', 'splitMode', 'canvasBorder', 'canvasBorderThickness', 'designMode', 'htmlContent'];
+        const relevantKeys = ['items', 'canvasWidth', 'canvasHeight', 'isRotated', 'splitMode', 'canvasBorder', 'canvasBorderThickness', 'designMode', 'htmlContent', 'activeTemplate'];
         let changed = false;
 
         for (const key of relevantKeys) {
@@ -147,10 +190,28 @@ export const useStore = create(withHistory((set, get) => ({
   selectedPrinterInfo: null,
   designMode: 'canvas',
   htmlContent: '',
+  activeTemplate: null,
   showAiConfig: false,
   setShowAiConfig: (val) => set({ showAiConfig: val }),
-  setDesignMode: (val) => set({ designMode: val }),
+  setDesignMode: (val) => set((state) => ({
+    designMode: val,
+    ...(val === 'canvas' ? { activeTemplate: null } : {})
+  })),
   setHtmlContent: (val) => set({ htmlContent: val }),
+  setTemplateConfig: (id, params = {}) => set({
+    designMode: 'html',
+    activeTemplate: { id, params },
+    htmlContent: buildTemplateHtml(id, params)
+  }),
+  updateTemplateParams: (newParams) => set((state) => {
+    if (!state.activeTemplate) return state;
+    const params = { ...state.activeTemplate.params, ...newParams };
+    return {
+      activeTemplate: { ...state.activeTemplate, params },
+      htmlContent: buildTemplateHtml(state.activeTemplate.id, params)
+    };
+  }),
+  ejectTemplate: () => set({ activeTemplate: null }),
   getStageB64: async () => {
     if (typeof window !== 'undefined' && window.__getStageB64) {
       return await window.__getStageB64();
@@ -314,6 +375,7 @@ export const useStore = create(withHistory((set, get) => ({
           splitMode: state.splitMode,
           designMode: state.designMode,
           htmlContent: state.htmlContent,
+          activeTemplate: state.activeTemplate,
           items: itemsToPrint
         }
       }
@@ -605,7 +667,8 @@ export const useStore = create(withHistory((set, get) => ({
             canvasBorderThickness: thickness, splitMode: state.splitMode,
             designMode: state.designMode, htmlContent: state.htmlContent,
             items: state.items, currentPage: state.currentPage,
-            batchRecords, printCopies
+            batchRecords, printCopies,
+            activeTemplate: state.activeTemplate
           }
         })
       });
@@ -630,7 +693,8 @@ export const useStore = create(withHistory((set, get) => ({
         canvasBorderThickness: thickness, splitMode: state.splitMode,
         designMode: state.designMode, htmlContent: state.htmlContent,
         items: state.items, currentPage: state.currentPage,
-        batchRecords, printCopies
+        batchRecords, printCopies,
+        activeTemplate: state.activeTemplate
       }
     };
     if (newName) payload.name = newName;
@@ -663,7 +727,7 @@ export const useStore = create(withHistory((set, get) => ({
 
   loadProject: (proj) => {
     set({ currentProjectId: proj.id });
-    const s = proj.canvas_state;
+    const s = normalizeCanvasState(proj.canvas_state || {});
     const batchRecords = s.batchRecords || [{}];
     set({
       canvasWidth: s.width || 384,
@@ -673,6 +737,7 @@ export const useStore = create(withHistory((set, get) => ({
       splitMode: s.splitMode || false,
       designMode: s.designMode || 'canvas',
       htmlContent: s.htmlContent || '',
+      activeTemplate: s.activeTemplate || null,
       isRotated: s.isRotated || false,
       batchRecords,
       printCopies: s.printCopies || 1,
@@ -1053,7 +1118,8 @@ export const useStore = create(withHistory((set, get) => ({
     selectedPagesForPrint: [], 
     currentProjectId: null, 
     designMode: 'canvas', 
-    htmlContent: '' 
+    htmlContent: '',
+    activeTemplate: null
     // We specifically omitted history wipes here so the user can Undo a canvas clear!
   }),
   

@@ -130,9 +130,8 @@ const ToggleBtn = ({ icon: Icon, active, onClick, label }) => (
 );
 
 export default function PropertiesPanel() {
-  const { items, selectedId, updateItem, deleteItem, canvasWidth, canvasHeight, canvasBorder, setCanvasBorder, canvasBorderThickness, setCanvasBorderThickness, setCanvasSize, getMmToPx, getPxToMm, settings, updateSettingsAPI, fonts, uploadFont, isRotated, setIsRotated, splitMode, setSplitMode, printerProfile, selectedPrinter, selectedPrinterInfo, batchRecords, setBatchRecords, updateBatchRecord, addBatchRecord, removeBatchRecord, generateBatchMatrix, generateBatchSequence, designMode, setDesignMode, htmlContent, setHtmlContent } = useStore();
+  const { items, selectedId, updateItem, deleteItem, canvasWidth, canvasHeight, canvasBorder, setCanvasBorder, canvasBorderThickness, setCanvasBorderThickness, setCanvasSize, getMmToPx, getPxToMm, settings, updateSettingsAPI, fonts, uploadFont, isRotated, setIsRotated, splitMode, setSplitMode, printerProfile, selectedPrinter, selectedPrinterInfo, batchRecords, setBatchRecords, updateBatchRecord, addBatchRecord, removeBatchRecord, generateBatchMatrix, generateBatchSequence, designMode, setDesignMode, htmlContent, setHtmlContent, activeTemplate, updateTemplateParams, ejectTemplate } = useStore();
   const selectedItem = items.find(i => i.id === selectedId);
-  const selectedTemplateItem = selectedItem?.type === 'label_template' ? selectedItem : null;
   const isPreCut = selectedPrinterInfo?.media_type === 'pre-cut';
   const pInfo = selectedPrinterInfo || {};
   const caps = pInfo.capabilities || {};
@@ -276,10 +275,9 @@ export default function PropertiesPanel() {
       const formatted = beautify.html(htmlContent, { indent_size: 2 });
       setHtmlContent(formatted);
     } else if (target === 'item') {
-      const contentToFormat = selectedItem.html || selectedItem.custom_html || '';
+      const contentToFormat = selectedItem.html || '';
       const formatted = beautify.html(contentToFormat, { indent_size: 2 });
       if (selectedItem.type === 'html') updateItem(selectedId, { html: formatted });
-      if (selectedItem.type === 'label_template') updateItem(selectedId, { custom_html: formatted });
     }
   };
 
@@ -328,11 +326,6 @@ export default function PropertiesPanel() {
     setIsSaving(true);
     await updateSettingsAPI(localSettings);
     setTimeout(() => setIsSaving(false), 1500);
-  };
-
-  const updateSelectedTemplate = (templateChanges) => {
-    if (!selectedItem || !selectedTemplateItem) return;
-    updateItem(selectedId, templateChanges);
   };
 
   // Restrict one axis strictly to the hardware print width, letting the feed axis grow infinitely.
@@ -712,21 +705,121 @@ export default function PropertiesPanel() {
           <>
             {designMode === 'html' ? (
               <div className="space-y-4 h-full flex flex-col">
-                <div className="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
-                  <h2 className="text-lg font-serif tracking-tight text-neutral-900 dark:text-white">HTML Editor</h2>
-                  <button onClick={() => handleFormatHtml('designMode')} className="text-[10px] text-blue-600 bg-blue-50 px-2 py-1 rounded font-bold uppercase hover:bg-blue-100 transition-colors">
-                    Auto-Format
-                  </button>
-                </div>
-                <p className="text-[10px] text-neutral-500">
-                  Wrap text in <code>&lt;div class=&quot;auto-text&quot;&gt;</code> to automatically scale it to fit the container.
-                </p>
-                <textarea
-                  value={htmlContent}
-                  onChange={(e) => setHtmlContent(e.target.value)}
-                  className="w-full flex-1 bg-neutral-50 dark:bg-neutral-950 border border-neutral-300 dark:border-neutral-700 p-3 text-sm font-mono dark:text-white focus:outline-none focus:border-blue-500"
-                  placeholder="<div class='auto-text'>Hello World</div>"
-                />
+                {activeTemplate ? (
+                  <>
+                    <div className="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
+                      <h2 className="text-lg font-serif tracking-tight text-neutral-900 dark:text-white">Template Settings</h2>
+                      <button onClick={ejectTemplate} className="text-[10px] text-amber-600 bg-amber-50 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-1 rounded font-bold uppercase hover:bg-amber-100 transition-colors">
+                        Eject to Custom HTML
+                      </button>
+                    </div>
+
+                    <div className="space-y-3 overflow-y-auto pr-2 pb-2">
+                      {(() => {
+                        const meta = TEMPLATE_METADATA.find((t) => t.id === activeTemplate.id) || TEMPLATE_METADATA[0];
+                        return meta.fields.map((field) => {
+                          const value = activeTemplate.params[field.name] ?? field.default ?? '';
+                          const handleParamChange = (val) => updateTemplateParams({ [field.name]: val });
+
+                          if (field.type === 'icon') {
+                            return (
+                              <div key={field.name}>
+                                <label className={labelClass}>{field.label}</label>
+                                <div className="flex items-center gap-3 mb-3">
+                                  {value ? (
+                                    <img
+                                      src={value}
+                                      alt={field.label}
+                                      className="w-10 h-10 object-contain bg-white border border-neutral-300 dark:border-neutral-700 p-1 rounded"
+                                    />
+                                  ) : (
+                                    <div className="w-10 h-10 bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded flex items-center justify-center text-[10px] text-neutral-400">
+                                      None
+                                    </div>
+                                  )}
+                                  <button
+                                    onClick={() => setTemplateIconField(field.name)}
+                                    className="px-3 py-1.5 bg-neutral-100 dark:bg-neutral-800 text-xs font-bold uppercase tracking-wider hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors dark:text-white rounded"
+                                  >
+                                    Choose Icon
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          if (field.type === 'textarea') {
+                            return (
+                              <div key={field.name}>
+                                <label className={labelClass}>{field.label}</label>
+                                <textarea
+                                  value={value}
+                                  onChange={(e) => handleParamChange(e.target.value)}
+                                  className={inputClass}
+                                  rows={3}
+                                />
+                              </div>
+                            );
+                          }
+
+                          if (field.type === 'select') {
+                            return (
+                              <div key={field.name}>
+                                <label className={labelClass}>{field.label}</label>
+                                <select
+                                  value={value}
+                                  onChange={(e) => handleParamChange(e.target.value)}
+                                  className={inputClass}
+                                >
+                                  {(field.options || []).map((option) => (
+                                    <option key={option.value || option} value={option.value || option}>
+                                      {option.label || option}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div key={field.name}>
+                              <label className={labelClass}>{field.label}</label>
+                              <input
+                                type="text"
+                                value={value}
+                                onChange={(e) => handleParamChange(e.target.value)}
+                                className={inputClass}
+                              />
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+
+                    <div className="mt-auto pt-4 border-t border-neutral-100 dark:border-neutral-800">
+                      <label className={labelClass}>Generated HTML (Read-Only)</label>
+                      <textarea value={htmlContent} readOnly className={`${inputClass} opacity-70 bg-neutral-100 dark:bg-neutral-900 cursor-not-allowed`} rows={6} />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
+                      <h2 className="text-lg font-serif tracking-tight text-neutral-900 dark:text-white">Raw HTML Editor</h2>
+                      <button onClick={() => handleFormatHtml('designMode')} className="text-[10px] text-blue-600 bg-blue-50 px-2 py-1 rounded font-bold uppercase hover:bg-blue-100 transition-colors">
+                        Auto-Format
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-neutral-500">
+                      Wrap text in <code>&lt;div class=&quot;auto-text&quot;&gt;</code> to automatically scale it to fit the container.
+                    </p>
+                    <textarea
+                      value={htmlContent}
+                      onChange={(e) => setHtmlContent(e.target.value)}
+                      className="w-full flex-1 bg-neutral-50 dark:bg-neutral-950 border border-neutral-300 dark:border-neutral-700 p-3 text-sm font-mono dark:text-white focus:outline-none focus:border-blue-500"
+                      placeholder="<div class='auto-text'>Hello World</div>"
+                    />
+                  </>
+                )}
               </div>
             ) : selectedItem && (
               <>
@@ -853,138 +946,6 @@ export default function PropertiesPanel() {
                 </>
               )}
 
-              {selectedTemplateItem && (
-                <>
-                  <div>
-                    <label className={labelClass}>Template Engine</label>
-                    <select
-                      value={selectedTemplateItem.template_id || 'centered_text'}
-                      onChange={(e) => updateSelectedTemplate({ template_id: e.target.value })}
-                      className={inputClass}
-                    >
-                      {TEMPLATE_METADATA.map((template) => (
-                        <option key={template.id} value={template.id}>{template.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Font Family</label>
-                    <div className="flex gap-2">
-                      <select
-                        value={selectedTemplateItem.font || settings?.default_font || 'RobotoCondensed.ttf'}
-                        onChange={(e) => updateSelectedTemplate({ font: e.target.value })}
-                        className={inputClass}
-                      >
-                        <option value="arial.ttf">System Arial</option>
-                        {fonts.map(f => (
-                          <option key={f.id} value={f.name}>{f.name.split('.')[0]}</option>
-                        ))}
-                      </select>
-                      <label className="flex items-center justify-center bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 px-3 cursor-pointer hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors" title="Upload Custom Font">
-                        <Plus size={16} className="text-neutral-500 dark:text-neutral-400" />
-                        <input type="file" accept=".ttf,.otf" className="hidden" onClick={(e) => e.target.value = null} onChange={(e) => { if(e.target.files[0]) uploadFont(e.target.files[0]); }} />
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 pt-4 border-t border-neutral-100 dark:border-neutral-800 space-y-3">
-                    <h3 className="text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-2">Template Data</h3>
-
-                    {(() => {
-                      const meta = TEMPLATE_METADATA.find((template) => template.id === selectedTemplateItem.template_id) || TEMPLATE_METADATA[0];
-                      const params = selectedTemplateItem.params || {};
-
-                      return meta.fields.map((field) => {
-                        const value = params[field.name] ?? selectedTemplateItem[field.name] ?? field.default ?? '';
-                        const handleParamChange = (nextValue) => {
-                          const nextParams = {
-                            ...params,
-                            [field.name]: nextValue
-                          };
-                          updateSelectedTemplate({ params: nextParams });
-                        };
-
-                        if (field.type === 'icon') {
-                          return (
-                            <div key={field.name}>
-                              <label className={labelClass}>{field.label}</label>
-                              <div className="flex items-center gap-3 mb-3">
-                                {value ? (
-                                  <img
-                                    src={value}
-                                    alt={field.label}
-                                    className="w-10 h-10 object-contain bg-white border border-neutral-300 dark:border-neutral-700 p-1 rounded"
-                                  />
-                                ) : (
-                                  <div className="w-10 h-10 bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded flex items-center justify-center text-[10px] text-neutral-400">
-                                    None
-                                  </div>
-                                )}
-                                <button
-                                  onClick={() => setTemplateIconField(field.name)}
-                                  className="px-3 py-1.5 bg-neutral-100 dark:bg-neutral-800 text-xs font-bold uppercase tracking-wider hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors dark:text-white rounded"
-                                >
-                                  Choose Icon
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        }
-
-                        if (field.type === 'textarea' || field.name === 'custom_html') {
-                          return (
-                            <div key={field.name}>
-                              <div className="flex items-center justify-between mb-1">
-                                <label className={labelClass.replace('mb-1.5', 'mb-0')}>{field.label}</label>
-                                {field.name === 'custom_html' && (
-                                  <button onClick={() => handleFormatHtml('item')} className="text-[9px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-bold uppercase hover:bg-blue-100 transition-colors">Format</button>
-                                )}
-                              </div>
-                              <textarea
-                                value={value}
-                                onChange={(e) => handleParamChange(e.target.value)}
-                                className={`${inputClass} ${field.name === 'custom_html' ? 'font-mono' : ''}`}
-                                rows={field.name === 'custom_html' ? 10 : 3}
-                              />
-                            </div>
-                          );
-                        }
-
-                        if (field.type === 'select') {
-                          return (
-                            <div key={field.name}>
-                              <label className={labelClass}>{field.label}</label>
-                              <select
-                                value={value}
-                                onChange={(e) => handleParamChange(e.target.value)}
-                                className={inputClass}
-                              >
-                                {(field.options || []).map((option) => (
-                                  <option key={option.value || option} value={option.value || option}>
-                                    {option.label || option}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <div key={field.name}>
-                            <label className={labelClass}>{field.label}</label>
-                            <input
-                              type="text"
-                              value={value}
-                              onChange={(e) => handleParamChange(e.target.value)}
-                              className={inputClass}
-                            />
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                </>
-              )}
 
               {selectedItem.type === 'group' && (
                 <>
@@ -1065,11 +1026,6 @@ export default function PropertiesPanel() {
                 </>
               )}
 
-              {selectedTemplateItem && (
-                <div className="text-[10px] text-neutral-500 leading-relaxed border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/30 p-3">
-                  Standard templates stay perfectly consistent. Use the <strong>Custom HTML</strong> option only for one-off styling requests.
-                </div>
-              )}
 
               {selectedItem.type === 'image' && (
                 <div className="flex gap-4">
@@ -1143,7 +1099,7 @@ export default function PropertiesPanel() {
                 </>
               )}
 
-              {selectedItem.type !== 'label_template' && (
+              {selectedItem && (
                 <div className="mt-4 pt-4 border-t border-neutral-100 dark:border-neutral-800">
                   <label className={labelClass}>Duplicate Element Only</label>
                   <div className="flex gap-4 mb-2">
@@ -1407,16 +1363,11 @@ export default function PropertiesPanel() {
           }} 
         />
       )}
-      {templateIconField && selectedTemplateItem && (
+      {templateIconField && activeTemplate && (
         <IconPicker
           onClose={() => setTemplateIconField(null)}
           onSelect={(b64) => {
-            updateSelectedTemplate({
-              params: {
-                ...(selectedTemplateItem.params || {}),
-                [templateIconField]: b64
-              }
-            });
+            updateTemplateParams({ [templateIconField]: b64 });
             setTemplateIconField(null);
           }}
         />

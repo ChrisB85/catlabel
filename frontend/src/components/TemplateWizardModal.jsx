@@ -7,7 +7,7 @@ import PresetPickerModal from './PresetPickerModal';
 
 export default function TemplateWizardModal({ template, onClose }) {
   const {
-    canvasWidth, canvasHeight, setItems, clearCanvas
+    canvasWidth, canvasHeight, setTemplateConfig, clearCanvas
   } = useStore();
   const [formData, setFormData] = useState({});
   const [batchMode, setBatchMode] = useState(false);
@@ -35,26 +35,7 @@ export default function TemplateWizardModal({ template, onClose }) {
 
   const handleGenerate = () => {
     clearCanvas();
-
-    const baseId = `template-${Date.now()}`;
-
-    setItems([
-      {
-        id: baseId,
-        type: 'label_template',
-        template_id: template.id,
-        params: formData,
-        x: 0,
-        y: 0,
-        width: canvasWidth,
-        height: canvasHeight,
-        pageIndex: 0,
-      },
-    ]);
-
-    // Instantly select the item so the Properties Panel shows the form fields
-    useStore.setState({ selectedId: baseId });
-
+    setTemplateConfig(template.id, formData);
     onClose();
   };
 

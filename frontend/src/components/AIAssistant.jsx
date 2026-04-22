@@ -214,6 +214,7 @@ export default function AIAssistant() {
       canvasBorderThickness: storeState.canvasBorderThickness,
       designMode: storeState.designMode,
       htmlContent: storeState.htmlContent,
+      activeTemplate: storeState.activeTemplate,
       items: storeState.items,
       currentPage: storeState.currentPage,
       batchRecords: storeState.batchRecords,
@@ -256,8 +257,18 @@ export default function AIAssistant() {
         }
         
         if (data.canvas_state) {
-            setDesignMode(data.canvas_state.designMode || 'canvas');
-            setHtmlContent(data.canvas_state.htmlContent || '');
+            if (data.canvas_state.activeTemplate) {
+                useStore.getState().setTemplateConfig(
+                    data.canvas_state.activeTemplate.id,
+                    data.canvas_state.activeTemplate.params || {}
+                );
+            } else {
+                if (data.canvas_state.designMode === 'html') {
+                    useStore.getState().ejectTemplate();
+                }
+                setDesignMode(data.canvas_state.designMode || 'canvas');
+                setHtmlContent(data.canvas_state.htmlContent || '');
+            }
             setItems(data.canvas_state.items ||[]);
             if (data.canvas_state.width && data.canvas_state.height) {
                 setCanvasSize(data.canvas_state.width, data.canvas_state.height);

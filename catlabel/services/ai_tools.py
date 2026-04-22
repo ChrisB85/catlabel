@@ -33,7 +33,7 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "apply_template",
-            "description": "MACRO: Replaces (or appends to) the canvas with a standard layout. Call apply_preset FIRST to set the canvas size.",
+            "description": "MACRO: Replaces the canvas with a full HTML/CSS responsive layout. Call apply_preset FIRST to set the canvas size.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -44,11 +44,6 @@ TOOLS_SCHEMA = [
                     "params": {
                         "type": "object",
                         "description": "Key-value pairs for the template fields. Use {{ var }} for batch data."
-                    },
-                    "append": {
-                        "type": "boolean",
-                        "default": False,
-                        "description": "Set to true if you are adding this template to existing elements on the canvas instead of clearing it."
                     }
                 },
                 "required": ["template_id", "params"]
@@ -355,34 +350,26 @@ class ToolRegistry:
 
 @ToolRegistry.register("apply_template")
 def tool_apply_template(args, canvas_state, cw, ch):
-    from .layout_engine import generate_template_items
+    from .layout_engine import TEMPLATE_METADATA
 
-    page_idx = max(
-        0,
-        _as_int(args.get("pageIndex", canvas_state.get("currentPage", 0)), _as_int(canvas_state.get("currentPage", 0), 0)),
-    )
     template_id = str(args.get("template_id") or "").strip()
     params = args.get("params") or {}
-    should_append = args.get("append", False)
+    valid_template_ids = {template["id"] for template in TEMPLATE_METADATA}
 
     if not template_id:
         return "Error: template_id is required."
     if not isinstance(params, dict):
         return "Error: params must be an object."
-
-    items = generate_template_items(template_id, cw, ch, params)
-    if items is None:
+    if template_id not in valid_template_ids:
         return f"Error: Unknown template_id '{template_id}'."
 
-    if not should_append:
-        _clear_page(canvas_state, page_idx)
+    canvas_state["designMode"] = "html"
+    canvas_state["activeTemplate"] = {"id": template_id, "params": params}
+    canvas_state["htmlContent"] = ""
+    canvas_state["items"] = []
+    canvas_state["currentPage"] = 0
 
-    canvas_items = canvas_state.setdefault("items", [])
-    for item in items:
-        item["pageIndex"] = page_idx
-        canvas_items.append(item)
-
-    return f"Page {page_idx} {'appended with' if should_append else 'replaced with'} template '{template_id}'."
+    return f"Canvas switched to HTML Template mode using '{template_id}'."
 
 @ToolRegistry.register("apply_preset")
 def tool_apply_preset(args, canvas_state, cw, ch):
@@ -481,6 +468,7 @@ def tool_add_barcode_or_qrcode(args, canvas_state, cw, ch):
 @ToolRegistry.register("set_html_design")
 def tool_set_html_design(args, canvas_state, cw, ch):
     canvas_state["designMode"] = "html"
+    canvas_state["activeTemplate"] = None
     canvas_state["htmlContent"] = args.get("html", "")
     canvas_state["items"] = []
     canvas_state["currentPage"] = 0
@@ -666,6 +654,7 @@ def tool_clear_canvas(args, canvas_state, cw, ch):
     canvas_state["items"] = []
     canvas_state["currentPage"] = 0
     canvas_state["designMode"] = "canvas"
+    canvas_state["activeTemplate"] = None
     canvas_state["htmlContent"] = ""
     return "Canvas cleared and reset to WYSIWYG mode."
 
