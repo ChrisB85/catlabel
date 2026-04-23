@@ -54,7 +54,7 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "apply_preset",
-            "description": "Instantly configures the canvas dimensions, rotation, and borders for a known standard label type (e.g., 'Niimbot D11', 'Cable Flag'). Call this FIRST.",
+            "description": "Instantly configures the canvas dimensions, rotation, and borders for a known standard label type. Call this FIRST. **Do NOT use if using set_canvas_dimensions.**",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -68,7 +68,7 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "set_canvas_dimensions",
-            "description": "Sets custom canvas dimensions in pixels (1mm = 8px) for CONTINUOUS rolls.",
+            "description": "Sets custom canvas dimensions in pixels (1mm = 8px) for CONTINUOUS rolls. Call this FIRST if making a custom size. **Do NOT use if using apply_preset.**",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -151,7 +151,7 @@ TOOLS_SCHEMA = [
         "type": "function",
         "function": {
             "name": "set_html_design",
-            "description": "Switches to HTML Mode for raw HTML/CSS designs. CRITICAL 3-PASS PIPELINE RULES: For auto-scaling text, you MUST wrap your text in `<div class='auto-text'>`. Furthermore, every `.auto-text` element MUST be the direct child of a `<div class='bound-box'>`. The `.bound-box` class locks the layout during rendering to prevent flexbox collapse. Example: `<div class='bound-box' style='flex: 1;'><div class='auto-text' style='font-weight: bold;'>{{ var }}</div></div>`. For single-line text that shouldn't wrap, use `<div class='auto-text' style='white-space: nowrap;'>`. To insert barcodes/QR codes, put `<div class='catlabel-code' data-type='qrcode' data-value='{{ var }}'></div>` inside a `.bound-box`. Keep all paddings minimal (0-4px). Do NOT set font-sizes manually.",
+            "description": "Switches to HTML Mode. CRITICAL: ONLY auto-scaling text and dynamic barcodes MUST be wrapped in `<div class='bound-box'>`. Decorative CSS/divs can exist outside bound-boxes. `.bound-box` locks layout to prevent flexbox collapse. Example text: `<div class='bound-box' style='flex: 1;'><div class='auto-text' style='white-space: nowrap;'>{{ var }}</div></div>`. For backgrounds, place a position:absolute div behind a position:relative flex container to prevent breaking flex properties. Keep padding 0-4px. Never set font-size manually.",
             "parameters": {
                 "type": "object",
                 "properties": {

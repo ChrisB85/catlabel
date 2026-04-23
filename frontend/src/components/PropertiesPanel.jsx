@@ -140,7 +140,7 @@ export default function PropertiesPanel() {
   const maxEnergy = caps.energy?.max || 65535;
   const maxDensity = caps.density?.max || 5;
 
-  const [panelWidth, setPanelWidth] = useState(320);
+  const [panelWidth, setPanelWidth] = useState(360);
 
   // Tab State
   const [activeTab, setActiveTab] = useState('canvas');

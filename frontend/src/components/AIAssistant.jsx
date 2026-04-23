@@ -790,7 +790,7 @@ export default function AIAssistant() {
               <div className="flex gap-2">
                 <button
                   onClick={handleCopyExternalPrompt}
-                  className="flex-1 bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-white p-2 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors text-xs uppercase tracking-widest font-bold flex items-center justify-center gap-2 border border-neutral-200 dark:border-neutral-800"
+                  className="flex-1 bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-white p-2 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors text-xs flex items-center justify-center gap-2 border border-neutral-200 dark:border-neutral-800"
                 >
                   {promptCopied ? (
                     <Check size={14} className="text-green-500" />

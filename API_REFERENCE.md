@@ -221,7 +221,7 @@ If `designMode` is `"html"`, elements inside `items` are ignored. Instead, the r
 CatLabel uses a custom 3-Pass Rendering Pipeline to guarantee text auto-scales perfectly and barcodes render sharply. You MUST follow this exact DOM structure:
 
 1. Create your layout container (e.g., a standard flexbox).
-2. Wrap every auto-scaling text or dynamic barcode element in a `<div class="bound-box">`. You assign your structural `flex` sizing to *this* box.
+2. ONLY wrap auto-scaling text or dynamic barcode elements in a `<div class="bound-box">`. You assign your structural `flex` sizing to *this* box. You can use standard HTML elements outside of bound-boxes for decorative borders and lines.
 3. Inside `.bound-box`, place `<div class="auto-text">` for text, or `<div class="catlabel-code">` for barcodes.
 
 ```json
@@ -232,7 +232,8 @@ CatLabel uses a custom 3-Pass Rendering Pipeline to guarantee text auto-scales p
 ```
 
 *Agent Rules for HTML Mode:*
-*   **The `.bound-box` Wrapper:** You MUST wrap `.auto-text` and `.catlabel-code` elements in `.bound-box`. The engine locks this box to absolute pixels during rendering to prevent flexbox collapse.
+*   **The `.bound-box` Wrapper:** You MUST wrap `.auto-text` and `.catlabel-code` elements in `.bound-box`.
+*   **Backgrounds & Thermal Safety:** Thermal printers smudge on large solid black blocks. Use sparse patterns. Apply backgrounds using a `position: absolute; inset: 0; z-index: 0;` div *behind* a `position: relative` flex container.
 *   **Text Sizing:** NEVER apply `font-size` directly to `.auto-text` or its children. The engine calculates the maximum safe font size automatically.
 *   **Single-Line Text:** To force text to shrink onto a single line without wrapping, add `style="white-space: nowrap;"` to the `.auto-text` div.
 *   **Padding:** Thermal labels are physically tiny. Keep layout padding extremely minimal (0px to 4px maximum).

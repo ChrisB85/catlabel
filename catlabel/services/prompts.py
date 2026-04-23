@@ -30,35 +30,44 @@ AVAILABLE TEMPLATES (Use apply_template):
 ======================================================================
 CRITICAL HTML/CSS LAYOUT RULES (FOR CUSTOM DESIGNS)
 ======================================================================
-We use a custom "3-Pass Rendering Pipeline" to guarantee text auto-scales perfectly. You MUST follow this exact DOM structure for all text and barcodes:
+We use a custom "3-Pass Rendering Pipeline" to guarantee text auto-scales perfectly. You MUST follow this DOM structure:
 
 1. Create a Flexbox container to divide the layout space (e.g., `<div style="display: flex; gap: 4px;">`).
-2. Every item MUST be wrapped in a `<div class="bound-box">`. You assign flex properties directly to the bound-box (e.g., `<div class="bound-box" style="flex: 1;">`).
+2. ONLY auto-scaling text and dynamic barcodes MUST be wrapped in a `<div class="bound-box">`. You assign flex properties directly to the bound-box.
+   *(Note: You can freely use standard HTML outside of bound-boxes for decorative lines, e.g., `<div style="height: 2px; background: black;"></div>`)*
 3. Inside the bound-box, place `<div class="auto-text">`.
 4. Place your text or {{{{ variables }}}} inside the auto-text div.
 
+THERMAL PRINTING SAFETY & BACKGROUNDS:
+Avoid large, solid blocks of black background, as they cause thermal smudging. If you want a background pattern, use sparse, subtle CSS patterns (e.g., widely spaced radial-gradient dots).
+To apply a background, place it in a `position: absolute; inset: 0; z-index: 0;` div BEHIND a `position: relative; z-index: 1;` flex container. Do NOT apply backgrounds directly to `.bound-box` elements.
+
 ✅ CORRECT STRUCTURE:
-<div style="display: flex; flex-direction: column; height: 100%; padding: 4px; gap: 4px;">
-    <div class="bound-box" style="flex: 2;">
-        <div class="auto-text" style="font-weight: 900; white-space: nowrap;">{{{{ title }}}}</div>
-    </div>
-    <div class="bound-box" style="flex: 1;">
-        <div class="auto-text">{{{{ subtitle }}}}</div>
+<div style="display: flex; flex-direction: column; height: 100%; padding: 4px; gap: 4px; position: relative;">
+    <div style="position: absolute; inset: 0; z-index: 0; background-image: radial-gradient(circle, #000 1px, transparent 1px); background-size: 8px 8px; opacity: 0.15;"></div>
+    <div style="position: relative; z-index: 1; display: flex; flex-direction: column; height: 100%;">
+        <div class="bound-box" style="flex: 2;">
+            <div class="auto-text" style="font-weight: 900; white-space: nowrap;">{{{{ title }}}}</div>
+        </div>
+        <div style="height: 2px; background: black; width: 100%;"></div> <!-- Decorative line is safe here! -->
+        <div class="bound-box" style="flex: 1;">
+            <div class="auto-text">{{{{ subtitle }}}}</div>
+        </div>
     </div>
 </div>
 
 ❌ WRONG (Will break the rendering engine):
 - DO NOT put .auto-text directly inside a flex container without a .bound-box wrapper.
-- DO NOT apply `font-size` to .auto-text or its children (the engine calculates this dynamically!).
-- DO NOT use large paddings (e.g., 10px+). Thermal labels are tiny; use 0px to 4px padding maximum.
+- DO NOT apply `font-size` to .auto-text or its children.
+- DO NOT use large paddings (e.g., 10px+). Keep it between 0px to 4px maximum.
 
 WRAPPING vs SINGLE-LINE:
-By default, `.auto-text` wraps over multiple lines. To force the text to maximize its size on a SINGLE line, add `white-space: nowrap;` directly to the auto-text div.
+By default, `.auto-text` wraps. To force maximum scaling on a SINGLE line, add `white-space: nowrap;` directly to the auto-text div.
 
 BARCODES & QR CODES:
-To insert a dynamic code, use our special div INSIDE a `.bound-box`. Set its parent bound-box flex ratio to control its size. Do NOT use <img> tags for barcodes.
-✅ CORRECT QR: `<div class="bound-box" style="flex: 1;"><div class="catlabel-code" data-type="qrcode" data-value="{{{{ id }}}}"></div></div>`
-✅ CORRECT BARCODE: `<div class="bound-box" style="flex: 1;"><div class="catlabel-code" data-type="barcode" data-format="code128" data-value="{{{{ upc }}}}"></div></div>`
+Do NOT use <img> tags. Use our special div INSIDE a `.bound-box`:
+✅ QR: `<div class="bound-box" style="flex: 1;"><div class="catlabel-code" data-type="qrcode" data-value="{{{{ id }}}}"></div></div>`
+✅ BARCODE: `<div class="bound-box" style="flex: 1;"><div class="catlabel-code" data-type="barcode" data-format="code128" data-value="{{{{ upc }}}}"></div></div>`
 
 CRITICAL FONT RULES (MUST OBEY):
 1. NEVER import fonts from external sources (NO Google Fonts, NO `@import`, NO `<link>`).
@@ -66,7 +75,7 @@ CRITICAL FONT RULES (MUST OBEY):
 3. Reference them EXACTLY by name without the extension (e.g. `font-family: 'Roboto', sans-serif;`).
 
 BATCH PRINTING PARADIGM:
-Do NOT create multiple pages for a list of data. To print a batch:
-1. Create your layout placing `{{{{ variables }}}}` where dynamic data goes.
-2. Call `set_batch_records` passing the array of data. The frontend handles generating the copies automatically!
+Do NOT create multiple pages for a list of data.
+1. Create your layout with `{{{{ variables }}}}`.
+2. Call `set_batch_records` passing the array of data. The frontend generates copies automatically!
 """
