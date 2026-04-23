@@ -34,7 +34,7 @@ export const processHtmlDynamicElements = async (container, width, height, isCan
         bwipjs.toCanvas(canvas, {
           bcid: format,
           text: value,
-          scale: 3,
+          scale: 8,
           includetext: false,
           backgroundcolor: 'FFFFFF'
         });
@@ -42,7 +42,7 @@ export const processHtmlDynamicElements = async (container, width, height, isCan
       } else if (type === 'qrcode') {
         dataUrl = await QRCode.toDataURL(value, {
           margin: 1,
-          scale: 4,
+          scale: 16,
           color: { dark: '#000000', light: '#FFFFFF' }
         });
       }
@@ -211,7 +211,7 @@ export const useCodeGenerator = (type, data, barcodeType) => {
           bwipjs.toCanvas(canvas, {
             bcid,
             text: String(data),
-            scale: 6,
+            scale: 12,
             includetext: false,
             backgroundcolor: 'FFFFFF'
           });
@@ -230,7 +230,7 @@ export const useCodeGenerator = (type, data, barcodeType) => {
       try {
         const dataUrl = await QRCode.toDataURL(String(data), {
           margin: 1,
-          scale: 12,
+          scale: 24,
           color: { dark: '#000000', light: '#FFFFFF' }
         });
 

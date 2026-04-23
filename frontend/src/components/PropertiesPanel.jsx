@@ -349,7 +349,7 @@ export default function PropertiesPanel() {
     return `${directValues} ${childValues}`;
   };
 
-  const templateStr = items.map((item) => collectItemTemplateValues(item)).join(' ');
+  const templateStr = items.map((item) => collectItemTemplateValues(item)).join(' ') + (designMode === 'html' ? ` ${htmlContent}` : '');
   const templateMatches = templateStr.match(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g) || [];
   const templateKeys = templateMatches.map((match) => match.replace(/[{}]/g, '').trim());
   const existingKeys = batchRecords.flatMap((record) => Object.keys(record || {}));

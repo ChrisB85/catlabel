@@ -303,6 +303,13 @@ export const useStore = create(withHistory((set, get) => ({
   }),
   
   duplicatePage: (pageIndex) => set((state) => {
+    if (state.designMode === 'html') {
+      const recordToClone = state.batchRecords[0] || {};
+      return {
+        batchRecords: [...state.batchRecords, { ...recordToClone }]
+      };
+    }
+
     const targetPage = Math.max(0, Number(pageIndex) || 0);
     const itemsToClone = state.items.filter((item) => Number(item.pageIndex ?? 0) === targetPage);
     if (!itemsToClone.length) return state;
@@ -484,11 +491,31 @@ export const useStore = create(withHistory((set, get) => ({
   setAiInput: (input) => set({ aiInput: input }),
   setAiConvId: (id) => set({ aiConvId: id }),
   setAiSessionUsage: (usage) => set({ aiSessionUsage: usage }),
+  aiMode: 'live',
+  setAiMode: (val) => set({ aiMode: val }),
+  aiExternalIntent: '',
+  setAiExternalIntent: (val) => set({ aiExternalIntent: val }),
+  aiExternalPrompt: '',
+  setAiExternalPrompt: (val) => set({ aiExternalPrompt: val }),
+  aiExternalResponse: '',
+  setAiExternalResponse: (val) => set({ aiExternalResponse: val }),
+  aiExternalError: '',
+  setAiExternalError: (val) => set({ aiExternalError: val }),
+  aiExternalNotice: '',
+  setAiExternalNotice: (val) => set({ aiExternalNotice: val }),
+  aiExternalResults: [],
+  setAiExternalResults: (val) => set({ aiExternalResults: val }),
   resetAiChat: () => set({
     aiMessages: [{ role: 'assistant', content: 'Hi! I am the CatLabel AI Assistant. Tell me what kind of label you want to design, and I will generate it for you!' }],
     aiInput: '',
     aiConvId: null,
-    aiSessionUsage: { tokens: 0, promptTokens: 0, completionTokens: 0, cost: 0 }
+    aiSessionUsage: { tokens: 0, promptTokens: 0, completionTokens: 0, cost: 0 },
+    aiExternalIntent: '',
+    aiExternalPrompt: '',
+    aiExternalResponse: '',
+    aiExternalError: '',
+    aiExternalNotice: '',
+    aiExternalResults: []
   }),
 
   // --- HIERARCHICAL PROJECT MANAGEMENT ---
@@ -1199,6 +1226,16 @@ export const useStore = create(withHistory((set, get) => ({
 
   multiplyWorkspace: (copies) => set((state) => {
     const totalCopies = Math.max(1, Number(copies) || 1);
+
+    if (state.designMode === 'html') {
+      const newRecords = [...state.batchRecords];
+      const recordToClone = state.batchRecords[0] || {};
+      for (let i = 0; i < totalCopies; i++) {
+        newRecords.push({ ...recordToClone });
+      }
+      return { batchRecords: newRecords };
+    }
+
     const currentItems = state.items.filter((item) => Number(item.pageIndex ?? 0) === state.currentPage);
     if (!currentItems.length) return state;
 

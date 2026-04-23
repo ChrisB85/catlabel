@@ -120,12 +120,12 @@ def _resolve_printer_status(printer_info: Optional[Dict[str, Any]], context: Dic
         p_media = printer_info.get("media_type", "continuous")
         p_width = printer_info.get("width_mm", context["engine_rules"]["hardware_width_mm"])
         p_dpi = printer_info.get("dpi", 203)
-        return f"SELECTED OFFLINE PRINTER: '{p_name}' | Media Type: {p_media.upper()} | DPI: {p_dpi} | Max Print Width: {p_width}mm."
+        return f"SELECTED OFFLINE PRINTER: '{p_name}' | Media Type: {p_media.upper()} | DPI: {p_dpi} | Max Print Width: {p_width}mm. Tailor your design constraints strictly to this offline profile."
 
     if media_pref in ["continuous", "pre-cut"]:
-        return f"NO PRINTER CONNECTED. User default media type preference is: {media_pref.upper()}."
+        return f"NO PRINTER CONNECTED. Assume a generic continuous roll with a hardware width of 48mm (384px in canvas coordinates) unless the user specifies otherwise. User default media type preference is: {media_pref.upper()}."
 
-    return "NO PRINTER CONNECTED. Media type UNKNOWN. Ask the user if they use 'pre-cut' labels or 'continuous' rolls."
+    return "NO PRINTER CONNECTED. Assume a generic continuous roll with a hardware width of 48mm (384px in canvas coordinates) unless the user specifies otherwise. If their request implies a specific label type (e.g., a tiny cable flag), ask them to clarify or use a standard preset."
 
 
 def _sanitize_manual_canvas_state(value: Any, key: Optional[str] = None) -> Any:
@@ -404,6 +404,9 @@ def build_manual_prompt(req: ManualPromptRequest):
     tools_str = json.dumps(TOOLS_SCHEMA, indent=2)
     state_str = json.dumps(safe_state, indent=2)
 
+    is_empty = len(req.canvas_state.get("items", [])) == 0 and not str(req.canvas_state.get("htmlContent", "") or "").strip()
+    empty_note = "- The canvas is currently empty. Create a new design from scratch satisfying the request." if is_empty else "- Respect the existing design whenever possible and make the smallest tool-based changes needed to satisfy the request."
+
     final_prompt = f"""{sys_prompt}
 
 YOUR AVAILABLE TOOLS:
@@ -417,12 +420,12 @@ USER REQUEST:
 
 IMPORTANT:
 - The user may also attach or paste an image snapshot of the current canvas in the same conversation. If present, use that image as the visual source of truth for overlap, spacing, and alignment corrections.
-- Respect the existing design whenever possible and make the smallest tool-based changes needed to satisfy the request.
+{empty_note}
 
 OUTPUT INSTRUCTIONS:
 You must fulfill the user's request by calling the appropriate tools.
 DO NOT output conversational text, explanations, or markdown outside of the JSON block.
-You MUST output ONLY a valid JSON array containing the tool calls.
+You MUST output the JSON array inside a standard Markdown JSON code block (```json ... ```).
 
 Example format:
 [
@@ -508,6 +511,10 @@ def chat_with_agent(req: ChatRequest):
     printer_status = _resolve_printer_status(req.printer_info, context)
 
     sys_prompt = build_system_prompt(context, printer_status)
+
+    is_empty = len(req.canvas_state.get("items", [])) == 0 and not str(req.canvas_state.get("htmlContent", "") or "").strip()
+    if is_empty:
+        sys_prompt += "\n\nNOTE: The canvas is currently empty. Create a new design from scratch satisfying the request."
 
     messages = [{"role": "system", "content": sys_prompt}] + req.messages
 

@@ -107,8 +107,11 @@ export default function AIAssistant() {
   const setSessionUsage = useStore((state) => state.setAiSessionUsage);
   const resetAiChat = useStore((state) => state.resetAiChat);
   const setShowAiConfig = useStore((state) => state.setShowAiConfig);
+  const items = useStore((state) => state.items);
+  const htmlContent = useStore((state) => state.htmlContent);
 
-  const [aiMode, setAiMode] = useState('live');
+  const aiMode = useStore((state) => state.aiMode);
+  const setAiMode = useStore((state) => state.setAiMode);
 
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -116,14 +119,22 @@ export default function AIAssistant() {
   const [histories, setHistories] = useState([]);
 
   const [externalLoading, setExternalLoading] = useState(false);
-  const [externalIntent, setExternalIntent] = useState('');
-  const [externalPrompt, setExternalPrompt] = useState('');
-  const [externalResponse, setExternalResponse] = useState('');
-  const [externalError, setExternalError] = useState('');
-  const [externalNotice, setExternalNotice] = useState('');
-  const [externalResults, setExternalResults] = useState([]);
+  const externalIntent = useStore((state) => state.aiExternalIntent);
+  const setExternalIntent = useStore((state) => state.setAiExternalIntent);
+  const externalPrompt = useStore((state) => state.aiExternalPrompt);
+  const setExternalPrompt = useStore((state) => state.setAiExternalPrompt);
+  const externalResponse = useStore((state) => state.aiExternalResponse);
+  const setExternalResponse = useStore((state) => state.setAiExternalResponse);
+  const externalError = useStore((state) => state.aiExternalError);
+  const setExternalError = useStore((state) => state.setAiExternalError);
+  const externalNotice = useStore((state) => state.aiExternalNotice);
+  const setExternalNotice = useStore((state) => state.setAiExternalNotice);
+  const externalResults = useStore((state) => state.aiExternalResults);
+  const setExternalResults = useStore((state) => state.setAiExternalResults);
   const [promptCopied, setPromptCopied] = useState(false);
   const [imageCopied, setImageCopied] = useState(false);
+
+  const isEmpty = items.length === 0 && (!htmlContent || htmlContent.trim() === '');
 
   useEffect(() => {
     if (aiMode === 'live') {
@@ -753,7 +764,7 @@ export default function AIAssistant() {
             <textarea
               value={externalIntent}
               onChange={(e) => setExternalIntent(e.target.value)}
-              placeholder="E.g. Move the product name up, make the barcode wider, and ensure nothing overlaps."
+              placeholder={isEmpty ? "E.g. Design a shipping label for a fragile package." : "E.g. Move the product name up, make the barcode wider, and ensure nothing overlaps."}
               className="w-full bg-transparent border border-neutral-300 dark:border-neutral-700 p-3 text-sm dark:text-white focus:outline-none focus:border-purple-500 transition-colors min-h-[96px]"
             />
             <button
@@ -790,14 +801,14 @@ export default function AIAssistant() {
                 </button>
                 <button
                   onClick={handleCopyCanvasImage}
-                  className="flex-1 bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-white p-2 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors text-xs uppercase tracking-widest font-bold flex items-center justify-center gap-2 border border-neutral-200 dark:border-neutral-800"
+                  className="flex-1 bg-neutral-100 dark:bg-neutral-900 text-neutral-900 dark:text-white p-2 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors text-xs flex items-center justify-center gap-2 border border-neutral-200 dark:border-neutral-800"
                 >
                   {imageCopied ? (
                     <Check size={14} className="text-green-500" />
                   ) : (
                     <ImageIcon size={14} />
                   )}
-                  {imageCopied ? 'Image Copied' : 'Copy Canvas as Image'}
+                  {imageCopied ? 'Image Copied' : 'Copy Image'}
                 </button>
               </div>
             </div>

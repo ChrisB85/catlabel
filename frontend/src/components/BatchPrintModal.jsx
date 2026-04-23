@@ -5,6 +5,8 @@ import { useStore } from '../store';
 export default function BatchPrintModal({ onClose }) {
   const batchRecords = useStore(state => state.batchRecords);
   const items = useStore(state => state.items);
+  const designMode = useStore(state => state.designMode);
+  const htmlContent = useStore(state => state.htmlContent);
   
   // Extract variables from the current canvas
   const canvasVariables = React.useMemo(() => {
@@ -18,8 +20,16 @@ export default function BatchPrintModal({ onClose }) {
         }
       });
     });
+
+    if (designMode === 'html' && htmlContent) {
+      const matches = String(htmlContent).match(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g);
+      if (matches) {
+        matches.forEach(m => vars.add(m.replace(/[{}]/g, '').trim()));
+      }
+    }
+
     return Array.from(vars);
-  }, [items]);
+  }, [items, designMode, htmlContent]);
 
   const hasExistingBatchRecords = Array.isArray(batchRecords) && (
     batchRecords.length > 1 ||
