@@ -22,6 +22,7 @@ The project uses the protocol implementations and rendering logic from the origi
 ### Automation & Wizards
 *   **Onboarding Wizard:** Guided setup for printer detection (Bluetooth scan) or manual brand selection (Niimbot, Phomemo, Generic).
 *   **AI-Assisted Layouts:** Generate designs from natural language prompts using an LLM-powered agent (requires an API key).
+*   **External AI Copy/Paste Loop:** Generate a fully-instructed prompt for ChatGPT or Claude, paste the returned JSON tool calls back into CatLabel, and even copy the current canvas image to the clipboard for visual correction rounds without spending CatLabel API credits.
 *   **Shipping Label Wizard:** A dedicated tool for creating shipping labels with a built-in address book and automated layout generation.
 *   **Template Wizards:** Specialized forms for generating layouts for price tags, inventory labels, and cable flags.
 *   **Date Tool:** Insert today's date, or calculate offset dates (e.g., for food expiry) in multiple formats.

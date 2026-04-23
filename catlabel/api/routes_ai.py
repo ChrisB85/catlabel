@@ -40,6 +40,18 @@ class ChatRequest(BaseModel):
     conv_id: Optional[int] = None
 
 
+class ManualPromptRequest(BaseModel):
+    intent: str
+    canvas_state: Dict[str, Any]
+    mac_address: Optional[str] = None
+    printer_info: Optional[Dict[str, Any]] = None
+
+
+class ManualExecuteRequest(BaseModel):
+    tool_calls: List[Dict[str, Any]]
+    canvas_state: Dict[str, Any]
+
+
 class ModelDTO(BaseModel):
     id: Optional[Union[int, str]] = None
     name: str
@@ -90,6 +102,79 @@ def sanitize_trace_data(data: Any) -> Any:
             except Exception:
                 pass
     return data
+
+
+def _resolve_printer_status(printer_info: Optional[Dict[str, Any]], context: Dict[str, Any]) -> str:
+    media_pref = context.get("intended_media_type", "unknown")
+    printer_transport = (printer_info or {}).get("transport")
+
+    if printer_info and printer_transport != "offline":
+        p_name = printer_info.get("name", "Unknown")
+        p_media = printer_info.get("media_type", "continuous")
+        p_width = printer_info.get("width_mm", context["engine_rules"]["hardware_width_mm"])
+        p_dpi = printer_info.get("dpi", 203)
+        return f"CONNECTED PRINTER: '{p_name}' | Media Type: {p_media.upper()} | DPI: {p_dpi} | Max Print Width: {p_width}mm"
+
+    if printer_info:
+        p_name = printer_info.get("name", "Unknown")
+        p_media = printer_info.get("media_type", "continuous")
+        p_width = printer_info.get("width_mm", context["engine_rules"]["hardware_width_mm"])
+        p_dpi = printer_info.get("dpi", 203)
+        return f"SELECTED OFFLINE PRINTER: '{p_name}' | Media Type: {p_media.upper()} | DPI: {p_dpi} | Max Print Width: {p_width}mm."
+
+    if media_pref in ["continuous", "pre-cut"]:
+        return f"NO PRINTER CONNECTED. User default media type preference is: {media_pref.upper()}."
+
+    return "NO PRINTER CONNECTED. Media type UNKNOWN. Ask the user if they use 'pre-cut' labels or 'continuous' rolls."
+
+
+def _sanitize_manual_canvas_state(value: Any, key: Optional[str] = None) -> Any:
+    if isinstance(value, dict):
+        return {k: _sanitize_manual_canvas_state(v, k) for k, v in value.items()}
+
+    if isinstance(value, list):
+        return [_sanitize_manual_canvas_state(item, key) for item in value]
+
+    if isinstance(value, str):
+        if value.startswith("data:image/"):
+            return f"[OMITTED IMAGE DATA len={len(value)}]"
+
+        if key in {"htmlContent", "html", "custom_html"}:
+            trimmed = value.strip()
+            if len(trimmed) > 2000:
+                return trimmed[:1000] + f"...[TRUNCATED HTML len={len(trimmed)}]"
+            return trimmed
+
+        if len(value) > 4000:
+            return value[:1000] + f"...[TRUNCATED TEXT len={len(value)}]"
+
+    return value
+
+
+def _normalize_manual_tool_call(call: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
+    if not isinstance(call, dict):
+        raise ValueError("Each tool call must be an object.")
+
+    function = call.get("function") or {}
+    tool_name = call.get("tool") or call.get("name") or call.get("tool_name") or function.get("name")
+    arguments = call.get("arguments", call.get("args"))
+
+    if arguments is None and function:
+        arguments = function.get("arguments", {})
+
+    if arguments is None:
+        arguments = {}
+
+    if isinstance(arguments, str):
+        arguments = json.loads(arguments or "{}")
+
+    if not isinstance(arguments, dict):
+        raise ValueError("Tool call arguments must be an object.")
+
+    if not tool_name:
+        raise ValueError("Tool call is missing a tool name.")
+
+    return str(tool_name), arguments
 
 
 @router.get("/config")
@@ -305,6 +390,78 @@ def delete_history(conv_id: int):
         return {"status": "ok"}
 
 
+@router.post("/manual/prompt-builder")
+def build_manual_prompt(req: ManualPromptRequest):
+    """Compile system rules, tools, and current state into a single prompt for external LLMs."""
+    from .main import get_agent_context
+    from ..services.prompts import build_system_prompt
+
+    context = get_agent_context()
+    printer_status = _resolve_printer_status(req.printer_info, context)
+    safe_state = _sanitize_manual_canvas_state(copy.deepcopy(req.canvas_state))
+
+    sys_prompt = build_system_prompt(context, printer_status)
+    tools_str = json.dumps(TOOLS_SCHEMA, indent=2)
+    state_str = json.dumps(safe_state, indent=2)
+
+    final_prompt = f"""{sys_prompt}
+
+YOUR AVAILABLE TOOLS:
+{tools_str}
+
+CURRENT CANVAS STATE:
+{state_str}
+
+USER REQUEST:
+{req.intent.strip()}
+
+IMPORTANT:
+- The user may also attach or paste an image snapshot of the current canvas in the same conversation. If present, use that image as the visual source of truth for overlap, spacing, and alignment corrections.
+- Respect the existing design whenever possible and make the smallest tool-based changes needed to satisfy the request.
+
+OUTPUT INSTRUCTIONS:
+You must fulfill the user's request by calling the appropriate tools.
+DO NOT output conversational text, explanations, or markdown outside of the JSON block.
+You MUST output ONLY a valid JSON array containing the tool calls.
+
+Example format:
+[
+  {{
+    "tool": "apply_template",
+    "arguments": {{ "template_id": "price_tag", "params": {{"currency_symbol": "$"}} }}
+  }}
+]
+"""
+    return {"prompt": final_prompt}
+
+
+@router.post("/manual/execute")
+def execute_manual_tools(req: ManualExecuteRequest):
+    """Execute an array of tool calls against the provided canvas state."""
+    canvas_state_copy = copy.deepcopy(req.canvas_state)
+    results = []
+
+    for index, call in enumerate(req.tool_calls):
+        try:
+            tool_name, arguments = _normalize_manual_tool_call(call)
+            result = execute_tool(tool_name, arguments, canvas_state_copy)
+            results.append({
+                "index": index,
+                "tool": tool_name,
+                "status": "success",
+                "result": result,
+            })
+        except Exception as e:
+            results.append({
+                "index": index,
+                "tool": call.get("tool") or call.get("name") or "unknown",
+                "status": "error",
+                "result": str(e),
+            })
+
+    return {"canvas_state": canvas_state_copy, "execution_results": results}
+
+
 @router.post("/chat")
 def chat_with_agent(req: ChatRequest):
     from ..core.database import engine
@@ -348,30 +505,8 @@ def chat_with_agent(req: ChatRequest):
 
     from ..services.prompts import build_system_prompt
 
-    media_pref = context.get('intended_media_type', 'unknown')
+    printer_status = _resolve_printer_status(req.printer_info, context)
 
-    p_media = "unknown"
-    printer_transport = (req.printer_info or {}).get("transport")
-
-    if req.printer_info and printer_transport != "offline":
-        p_name = req.printer_info.get("name", "Unknown")
-        p_media = req.printer_info.get("media_type", "continuous")
-        p_width = req.printer_info.get("width_mm", context['engine_rules']['hardware_width_mm'])
-        p_dpi = req.printer_info.get("dpi", 203)
-        printer_status = f"CONNECTED PRINTER: '{p_name}' | Media Type: {p_media.upper()} | DPI: {p_dpi} | Max Print Width: {p_width}mm"
-    elif req.printer_info:
-        p_name = req.printer_info.get("name", "Unknown")
-        p_media = req.printer_info.get("media_type", "continuous")
-        p_width = req.printer_info.get("width_mm", context['engine_rules']['hardware_width_mm'])
-        p_dpi = req.printer_info.get("dpi", 203)
-        printer_status = f"SELECTED OFFLINE PRINTER: '{p_name}' | Media Type: {p_media.upper()} | DPI: {p_dpi} | Max Print Width: {p_width}mm."
-    else:
-        if media_pref in ["continuous", "pre-cut"]:
-            p_media = media_pref
-            printer_status = f"NO PRINTER CONNECTED. User default media type preference is: {p_media.upper()}."
-        else:
-            printer_status = "NO PRINTER CONNECTED. Media type UNKNOWN. Ask the user if they use 'pre-cut' labels or 'continuous' rolls."
-    
     sys_prompt = build_system_prompt(context, printer_status)
 
     messages = [{"role": "system", "content": sys_prompt}] + req.messages

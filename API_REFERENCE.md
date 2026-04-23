@@ -97,6 +97,37 @@ Generates a pre-configured layout based on standard templates. Ideal for LLMs so
 }
 ```
 
+### `POST /api/ai/manual/prompt-builder`
+Builds a single large prompt string for external LLMs such as ChatGPT or Claude. The response includes the current tool schema, printer constraints, and a sanitized canvas state so you can copy/paste it into your preferred model.
+```json
+{
+  "intent": "Move the barcode down and stop the title from overlapping it.",
+  "canvas_state": { /* Canvas State Object */ },
+  "mac_address": "XX:XX:XX:XX:XX:XX",
+  "printer_info": { /* Optional printer info */ }
+}
+```
+
+### `POST /api/ai/manual/execute`
+Executes the JSON tool-call array returned by an external LLM. Tool calls are applied step-by-step against the provided canvas state and the final mutated state is returned.
+```json
+{
+  "tool_calls": [
+    {
+      "tool": "add_text_element",
+      "arguments": {
+        "text": "Hello",
+        "x": 0,
+        "y": 0,
+        "width": 384,
+        "height": 60
+      }
+    }
+  ],
+  "canvas_state": { /* Canvas State Object */ }
+}
+```
+
 ---
 
 ## 2. Canvas State Schema
