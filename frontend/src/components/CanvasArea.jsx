@@ -46,6 +46,7 @@ export default function CanvasArea() {
   const localStageRef = useRef(null);
   const localPreviewRef = useRef(null);
   const cvThick = canvasBorderThickness || 4;
+  const isHtmlMode = designMode === 'html';
 
   useEffect(() => {
     window.__getStageB64 = async () => {
@@ -69,10 +70,10 @@ export default function CanvasArea() {
   const printPx = selectedPrinterInfo?.width_px || Math.round((settings.print_width_mm || 48) * dotsPerMm);
   const batchRecords = useStore((state) => state.batchRecords) || [{}];
   const visibleRecords = batchRecords.slice(0, 10);
-  const maxPage = designMode === 'html' ? 0 : items.reduce((max, item) => Math.max(max, Number(item.pageIndex ?? 0)), 0);
-  const maxDisplayedPage = designMode === 'html' ? 0 : Math.max(maxPage, currentPage);
-  const pages = designMode === 'html' ? [0] : Array.from({ length: maxDisplayedPage + 1 }, (_, index) => index);
-  const selectedItem = designMode === 'html' ? null : items.find((item) => item.id === selectedId);
+  const maxPage = isHtmlMode ? 0 : items.reduce((max, item) => Math.max(max, Number(item.pageIndex ?? 0)), 0);
+  const maxDisplayedPage = isHtmlMode ? 0 : Math.max(maxPage, currentPage);
+  const pages = isHtmlMode ? [0] : Array.from({ length: maxDisplayedPage + 1 }, (_, index) => index);
+  const selectedItem = isHtmlMode ? null : items.find((item) => item.id === selectedId);
 
   useEffect(() => {
     if (!trRef.current) return;
@@ -241,7 +242,7 @@ export default function CanvasArea() {
       <div className="flex flex-col gap-10 min-h-max min-w-max pb-16">
         {visibleRecords.map((record, rIdx) => (
           <div key={rIdx} className="flex flex-col items-center gap-4">
-            {batchRecords.length > 1 && (
+            {batchRecords.length > 1 && !isHtmlMode && (
               <div className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">
                 Record {rIdx + 1} {rIdx === 9 && batchRecords.length > 10 ? `(Showing 10 of ${batchRecords.length} records)` : ''}
               </div>
@@ -249,43 +250,48 @@ export default function CanvasArea() {
 
             {pages.map((pageIndex, pageIdx) => {
               const pageItems = items.filter((item) => Number(item.pageIndex ?? 0) === pageIndex);
-              const isActive = currentPage === pageIndex;
+              const visualPageIndex = isHtmlMode ? rIdx : pageIndex;
+              const visualPageDisplayNum = isHtmlMode ? (rIdx + 1) : (pageIdx + 1);
+              const isActive = currentPage === visualPageIndex;
+              const showControls = isHtmlMode ? true : (rIdx === 0);
+              const isSelectedForPrint = selectedPagesForPrint.includes(visualPageIndex);
 
               return (
                 <div key={`${rIdx}-${pageIndex}`} className="flex flex-col items-center gap-2 relative">
                   <div className="flex items-center justify-between w-full px-2 mb-2">
                     <div className="flex items-center gap-2">
-                      {pages.length > 1 && (
+                      {(isHtmlMode ? batchRecords.length > 1 : pages.length > 1) && (
                         <input
                           type="checkbox"
-                          checked={selectedPagesForPrint.includes(pageIndex)}
-                          onChange={() => togglePageForPrint(pageIndex)}
+                          checked={isSelectedForPrint}
+                          onChange={() => togglePageForPrint(visualPageIndex)}
                           className="w-3.5 h-3.5 cursor-pointer accent-blue-600"
                           title="Select for batch printing"
                         />
                       )}
                       <span className="text-neutral-400 dark:text-neutral-500 text-[10px] uppercase tracking-widest font-bold">
-                        Label {pageIdx + 1} {isActive && '(Active)'}
+                        Label {visualPageDisplayNum} {isActive && '(Active)'}
+                        {isHtmlMode && rIdx === 9 && batchRecords.length > 10 && ` (Preview capped at 10)`}
                       </span>
                     </div>
-                    {rIdx === 0 && (
+                    {showControls && (
                       <div className="flex gap-3">
                         <button
-                          onClick={() => printPages([pageIndex])}
+                          onClick={() => printPages([visualPageIndex])}
                           className="text-[10px] text-emerald-600 dark:text-emerald-500 hover:text-emerald-700 dark:hover:text-emerald-400 uppercase font-bold tracking-widest transition-colors"
                           title="Print only this label"
                         >
                           Print
                         </button>
                         <button
-                          onClick={() => useStore.getState().duplicatePage(pageIndex)}
+                          onClick={() => useStore.getState().duplicatePage(visualPageIndex)}
                           className="text-[10px] text-blue-500 hover:text-blue-600 uppercase font-bold tracking-widest transition-colors"
                         >
                           Duplicate
                         </button>
-                        {pages.length > 1 && (
+                        {(isHtmlMode ? batchRecords.length > 1 : pages.length > 1) && (
                           <button
-                            onClick={() => deletePage(pageIndex)}
+                            onClick={() => deletePage(visualPageIndex)}
                             className="text-[10px] text-red-500 hover:text-red-600 uppercase font-bold tracking-widest transition-colors"
                           >
                             Delete
@@ -304,11 +310,11 @@ export default function CanvasArea() {
                     }}
                     onClick={() => {
                       if (!isActive) {
-                        setCurrentPage(pageIndex);
+                        setCurrentPage(visualPageIndex);
                       }
                     }}
                   >
-                    {designMode === 'html' ? (
+                    {isHtmlMode ? (
                       <div
                         style={{
                           width: canvasWidth * zoomScale,
@@ -328,7 +334,8 @@ export default function CanvasArea() {
                         >
                           <div
                             ref={(node) => {
-                              if (node && isActive && rIdx === 0) {
+                              const shouldCapture = isHtmlMode ? isActive : (isActive && rIdx === 0);
+                              if (node && shouldCapture) {
                                 localPreviewRef.current = node;
                               }
                             }}
@@ -348,7 +355,8 @@ export default function CanvasArea() {
                     ) : (
                       <Stage
                         ref={(node) => {
-                          if (node && isActive && rIdx === 0) {
+                          const shouldCapture = isHtmlMode ? isActive : (isActive && rIdx === 0);
+                          if (node && shouldCapture) {
                             localStageRef.current = node;
                           }
                         }}
@@ -604,7 +612,7 @@ export default function CanvasArea() {
         onClick={addPage}
         className="py-3 px-8 border-2 border-dashed border-neutral-300 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors rounded text-xs uppercase tracking-widest font-bold"
       >
-        + Add New Label
+        + Add New {isHtmlMode ? 'Data Record' : 'Label'}
       </button>
 
       <div className="text-neutral-400 dark:text-neutral-600 text-[10px] uppercase tracking-widest sticky bottom-0 bg-neutral-100 dark:bg-neutral-900/90 py-1 z-10">

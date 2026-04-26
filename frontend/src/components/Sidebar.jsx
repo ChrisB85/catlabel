@@ -33,6 +33,8 @@ export default function Sidebar() {
   const [showSavePresetModal, setShowSavePresetModal] = useState(false);
   const [showPresetPicker, setShowPresetPicker] = useState(false);
   const activePreset = useStore((state) => state.getActivePreset());
+  const batchRecords = useStore((state) => state.batchRecords) || [{}];
+  const isHtmlMode = designMode === 'html';
 
   const handleScan = async () => {
     setIsScanning(true);
@@ -60,8 +62,8 @@ export default function Sidebar() {
     handleScan();
   }, []);
 
-  const maxPage = designMode === 'html'
-    ? 0
+  const maxPage = isHtmlMode
+    ? batchRecords.length - 1
     : items.reduce((max, item) => Math.max(max, Number(item.pageIndex ?? 0)), 0);
   const pageCount = maxPage + 1;
 

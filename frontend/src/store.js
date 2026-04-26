@@ -267,6 +267,16 @@ export const useStore = create(withHistory((set, get) => ({
   setCurrentPage: (idx) => set({ currentPage: Math.max(0, Number(idx) || 0), selectedId: null, selectedIds: [] }),
   
   addPage: () => set((state) => {
+    if (state.designMode === 'html') {
+      const newRecords = [...(state.batchRecords || [{}]), {}];
+      return {
+        batchRecords: newRecords,
+        currentPage: newRecords.length - 1,
+        selectedId: null,
+        selectedIds: []
+      };
+    }
+
     const maxPage = Math.max(
       state.currentPage,
       ...state.items.map((item) => Number(item.pageIndex ?? 0))
@@ -276,6 +286,25 @@ export const useStore = create(withHistory((set, get) => ({
   
   deletePage: (pageIndex) => set((state) => {
     const targetPage = Math.max(0, Number(pageIndex) || 0);
+
+    if (state.designMode === 'html') {
+      let newRecords = state.batchRecords.filter((_, i) => i !== targetPage);
+      if (newRecords.length === 0) newRecords = [{}];
+      const nextCurrent = state.currentPage >= newRecords.length ? newRecords.length - 1 : state.currentPage;
+
+      const newSelectedPages = state.selectedPagesForPrint
+        .filter((p) => p !== targetPage)
+        .map((p) => (p > targetPage ? p - 1 : p));
+
+      return {
+        batchRecords: newRecords,
+        currentPage: Math.max(0, nextCurrent),
+        selectedId: null,
+        selectedIds: [],
+        selectedPagesForPrint: newSelectedPages
+      };
+    }
+
     const newItems = state.items
       .filter((item) => Number(item.pageIndex ?? 0) !== targetPage)
       .map((item) => {
@@ -303,14 +332,20 @@ export const useStore = create(withHistory((set, get) => ({
   }),
   
   duplicatePage: (pageIndex) => set((state) => {
+    const targetPage = Math.max(0, Number(pageIndex) || 0);
+
     if (state.designMode === 'html') {
-      const recordToClone = state.batchRecords[0] || {};
+      const recordToClone = state.batchRecords[targetPage] || {};
+      const newRecords = [...state.batchRecords];
+      newRecords.splice(targetPage + 1, 0, { ...recordToClone });
       return {
-        batchRecords: [...state.batchRecords, { ...recordToClone }]
+        batchRecords: newRecords,
+        currentPage: targetPage + 1,
+        selectedId: null,
+        selectedIds: []
       };
     }
 
-    const targetPage = Math.max(0, Number(pageIndex) || 0);
     const itemsToClone = state.items.filter((item) => Number(item.pageIndex ?? 0) === targetPage);
     if (!itemsToClone.length) return state;
 
@@ -370,18 +405,28 @@ export const useStore = create(withHistory((set, get) => ({
     ).sort((a, b) => a - b);
     if (normalizedPageIndices.length === 0) return;
 
-    const itemsToPrint = state.items.filter((item) =>
-      normalizedPageIndices.includes(Number(item.pageIndex ?? 0))
-    );
+    let itemsToPrint = state.items;
+    let finalBatchRecords = state.batchRecords || [{}];
+    let finalPageIndices = normalizedPageIndices;
+
+    if (state.designMode === 'html') {
+      finalBatchRecords = (state.batchRecords || [{}]).filter((_, i) => normalizedPageIndices.includes(i));
+      finalPageIndices = [0];
+      itemsToPrint = [];
+    } else {
+      itemsToPrint = state.items.filter((item) =>
+        normalizedPageIndices.includes(Number(item.pageIndex ?? 0))
+      );
+    }
 
     set({
       isPreparingForPrint: true,
       pendingPrintJob: {
         macAddress: state.selectedPrinter,
         splitMode: state.splitMode,
-        pageIndices: normalizedPageIndices,
+        pageIndices: finalPageIndices,
         copies: state.printCopies || 1,
-        batchRecords: state.batchRecords || [{}],
+        batchRecords: finalBatchRecords,
         dither: state.dither,
         canvasState: {
           width: state.canvasWidth,
@@ -1229,7 +1274,7 @@ export const useStore = create(withHistory((set, get) => ({
 
     if (state.designMode === 'html') {
       const newRecords = [...state.batchRecords];
-      const recordToClone = state.batchRecords[0] || {};
+      const recordToClone = state.batchRecords[state.currentPage] || {};
       for (let i = 0; i < totalCopies; i++) {
         newRecords.push({ ...recordToClone });
       }
