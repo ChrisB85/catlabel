@@ -314,45 +314,43 @@ export default function CanvasArea() {
                       }
                     }}
                   >
-                    {isHtmlMode ? (
+                    <div
+                      ref={el => { if (isActive && rIdx === 0) previewWrapperRefs.current[0] = el; }}
+                      style={{
+                        position: 'relative',
+                        width: (canvasWidth + WORKSPACE_PAD * 2) * zoomScale,
+                        height: (canvasHeight + WORKSPACE_PAD * 2) * zoomScale
+                      }}
+                    >
+                      {/* BASE HTML LAYER */}
                       <div
                         style={{
+                          position: 'absolute',
+                          top: WORKSPACE_PAD * zoomScale,
+                          left: WORKSPACE_PAD * zoomScale,
                           width: canvasWidth * zoomScale,
                           height: canvasHeight * zoomScale,
-                          transform: `translate(${WORKSPACE_PAD * zoomScale}px, ${WORKSPACE_PAD * zoomScale}px)`,
-                          backgroundColor: 'white',
-                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+                          overflow: 'hidden'
                         }}
                       >
-                        <div
-                          style={{
-                            transform: `scale(${zoomScale})`,
-                            transformOrigin: 'top left',
-                            width: canvasWidth,
-                            height: canvasHeight
-                          }}
-                        >
-                          <div
-                            ref={(node) => {
-                              const shouldCapture = isHtmlMode ? isActive : (isActive && rIdx === 0);
-                              if (node && shouldCapture) {
-                                localPreviewRef.current = node;
-                              }
-                            }}
-                            style={{ width: canvasWidth, height: canvasHeight }}
-                          >
-                            <HtmlLabel
-                              html={htmlContent}
-                              record={record}
-                              width={canvasWidth}
-                              height={canvasHeight}
-                              canvasBorder={canvasBorder}
-                              canvasBorderThickness={canvasBorderThickness}
-                            />
-                          </div>
+                        <div style={{
+                          transform: `scale(${zoomScale})`,
+                          transformOrigin: 'top left',
+                          width: canvasWidth,
+                          height: canvasHeight
+                        }}>
+                          <HtmlLabel
+                            html={layout?.htmlContent || ''}
+                            record={record}
+                            width={canvasWidth}
+                            height={canvasHeight}
+                            canvasBorder="none"
+                          />
                         </div>
                       </div>
-                    ) : (
+
+                      {/* KONVA OVERLAY LAYER */}
+                      <div style={{ position: 'absolute', inset: 0, zIndex: 2 }}>
                       <Stage
                         ref={(node) => {
                           const shouldCapture = isHtmlMode ? isActive : (isActive && rIdx === 0);
@@ -589,8 +587,8 @@ export default function CanvasArea() {
                           </Group>
                         </Layer>
                       </Stage>
-                    )}
-
+                      </div>
+                    </div>
                     {isActive && selectedItem && selectedIds.length === 1 && !isPanning && (
                       <FloatingToolbar
                         item={selectedItem}
