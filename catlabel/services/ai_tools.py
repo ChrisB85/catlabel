@@ -41,6 +41,10 @@ TOOLS_SCHEMA = [
                         "type": "string",
                         "description": "ID of the template (e.g., price_tag, inventory_tag, shipping_address)"
                     },
+                    "page_index": {
+                        "type": "integer",
+                        "description": "0 for the first label, 1 for the second. Allows mixed templates per page."
+                    },
                     "params": {
                         "type": "object",
                         "description": "Key-value pairs for the template fields. Use {{ var }} for batch data."
@@ -150,14 +154,18 @@ TOOLS_SCHEMA = [
     {
         "type": "function",
         "function": {
-            "name": "set_html_design",
-            "description": "Switches to HTML Mode. CRITICAL: ONLY auto-scaling text and dynamic barcodes MUST be wrapped in `<div class='bound-box'>`. Decorative CSS/divs can exist outside bound-boxes. `.bound-box` locks layout to prevent flexbox collapse. Example text: `<div class='bound-box' style='flex: 1;'><div class='auto-text' style='white-space: nowrap;'>{{ var }}</div></div>`. For backgrounds, place a position:absolute div behind a position:relative flex container to prevent breaking flex properties. Keep padding 0-4px. Never set font-size manually.",
+            "name": "set_page_layout",
+            "description": "Sets the base HTML/CSS background layout for a specific page index. Can be combined with Konva items layered on top. CRITICAL: ONLY auto-scaling text and dynamic barcodes MUST be wrapped in `<div class='bound-box'>`. Decorative CSS/divs can exist outside bound-boxes. `.bound-box` locks layout to prevent flexbox collapse. Example text: `<div class='bound-box' style='flex: 1;'><div class='auto-text' style='white-space: nowrap;'>{{ var }}</div></div>`. For backgrounds, place a position:absolute div behind a position:relative flex container to prevent breaking flex properties. Keep padding 0-4px. Never set font-size manually.",
             "parameters": {
                 "type": "object",
                 "properties": {
+                    "page_index": {
+                        "type": "integer",
+                        "description": "0 for the first page, 1 for the second, etc. Used to create distinct labels in a series."
+                    },
                     "html": {"type": "string"}
                 },
-                "required": ["html"]
+                "required": ["page_index", "html"]
             }
         }
     },
@@ -354,6 +362,7 @@ def tool_apply_template(args, canvas_state, cw, ch):
 
     template_id = str(args.get("template_id") or "").strip()
     params = args.get("params") or {}
+    page_idx = _as_int(args.get("page_index", 0), 0)
     valid_template_ids = {template["id"] for template in TEMPLATE_METADATA}
 
     if not template_id:
@@ -363,13 +372,19 @@ def tool_apply_template(args, canvas_state, cw, ch):
     if template_id not in valid_template_ids:
         return f"Error: Unknown template_id '{template_id}'."
 
-    canvas_state["designMode"] = "html"
-    canvas_state["activeTemplate"] = {"id": template_id, "params": params}
-    canvas_state["htmlContent"] = ""
-    canvas_state["items"] = []
-    canvas_state["currentPage"] = 0
+    layouts = canvas_state.get("pageLayouts", [])
+    while len(layouts) <= page_idx:
+        layouts.append({"pageIndex": len(layouts), "htmlContent": "", "activeTemplate": None})
+        
+    layouts[page_idx] = {
+        "pageIndex": page_idx,
+        "activeTemplate": {"id": template_id, "params": params},
+        "htmlContent": ""
+    }
+    canvas_state["pageLayouts"] = layouts
+    canvas_state["currentPage"] = page_idx
 
-    return f"Canvas switched to HTML Template mode using '{template_id}'."
+    return f"Page {page_idx} template applied: '{template_id}'."
 
 @ToolRegistry.register("apply_preset")
 def tool_apply_preset(args, canvas_state, cw, ch):
@@ -465,14 +480,23 @@ def tool_add_barcode_or_qrcode(args, canvas_state, cw, ch):
     })
     return f"{args.get('type')} added."
 
-@ToolRegistry.register("set_html_design")
-def tool_set_html_design(args, canvas_state, cw, ch):
-    canvas_state["designMode"] = "html"
-    canvas_state["activeTemplate"] = None
-    canvas_state["htmlContent"] = args.get("html", "")
-    canvas_state["items"] = []
-    canvas_state["currentPage"] = 0
-    return "Switched to HTML design mode and applied layout."
+@ToolRegistry.register("set_page_layout")
+def tool_set_page_layout(args, canvas_state, cw, ch):
+    page_idx = _as_int(args.get("page_index", 0), 0)
+    html = args.get("html", "")
+    
+    layouts = canvas_state.get("pageLayouts", [])
+    while len(layouts) <= page_idx:
+        layouts.append({"pageIndex": len(layouts), "htmlContent": "", "activeTemplate": None})
+        
+    layouts[page_idx] = {
+        "pageIndex": page_idx,
+        "htmlContent": html,
+        "activeTemplate": None
+    }
+    canvas_state["pageLayouts"] = layouts
+    canvas_state["currentPage"] = page_idx
+    return f"HTML Layout applied to page {page_idx}."
 
 @ToolRegistry.register("request_visual_preview")
 def tool_request_visual_preview(args, canvas_state, cw, ch):
@@ -653,9 +677,7 @@ def tool_delete_category(args, canvas_state, cw, ch):
 def tool_clear_canvas(args, canvas_state, cw, ch):
     canvas_state["items"] = []
     canvas_state["currentPage"] = 0
-    canvas_state["designMode"] = "canvas"
-    canvas_state["activeTemplate"] = None
-    canvas_state["htmlContent"] = ""
+    canvas_state["pageLayouts"] = [{"pageIndex": 0, "htmlContent": "", "activeTemplate": None}]
     return "Canvas cleared and reset to WYSIWYG mode."
 
 @ToolRegistry.register("trigger_ui_action")

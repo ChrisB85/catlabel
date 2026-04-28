@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Layer, Line, Rect, Stage } from 'react-konva';
 import { toPng } from 'html-to-image';
 import CanvasItemNode from './CanvasItemNode';
@@ -30,102 +30,83 @@ const renderCanvasBorder = (canvasState) => {
 
 export default function HeadlessPage({ state, record, pageIndex, onReady }) {
   const stageRef = useRef(null);
-  const htmlRef = useRef(null);
+  const containerRef = useRef(null);
   const items = state?.items || [];
+  const pageLayouts = state?.pageLayouts || [];
   const width = Math.max(1, Number(state?.width) || 384);
   const height = Math.max(1, Number(state?.height) || 384);
-  const isHtmlMode = state?.designMode === 'html';
+  
+  const activeLayout = pageLayouts.find(l => l.pageIndex === pageIndex) 
+    || pageLayouts[pageLayouts.length - 1] 
+    || { htmlContent: '' };
 
   const pageItems = useMemo(
-    () => items.filter((item) => Number(item.pageIndex ?? 0) === pageIndex),
-    [items, pageIndex]
+    () => {
+      const directItems = items.filter((item) => Number(item.pageIndex ?? 0) === pageIndex);
+      if (directItems.length > 0) return directItems;
+      const maxItemPage = items.reduce((max, item) => Math.max(max, Number(item.pageIndex ?? 0)), 0);
+      if (pageIndex > maxItemPage) {
+         return items.filter((item) => Number(item.pageIndex ?? 0) === maxItemPage);
+      }
+      return [];
+    }, [items, pageIndex]
   );
 
-  const captureHtml = useCallback(async () => {
-    if (!htmlRef.current) return;
+  const [htmlReady, setHtmlReady] = useState(false);
 
+  const captureBoth = useCallback(async () => {
+    if (!containerRef.current) return;
     try {
-      if (document.fonts?.ready) {
-        await document.fonts.ready;
-      }
-    } catch (error) {
-      console.warn('Font readiness check failed', error);
-    }
-
-    try {
-      const dataUrl = await toPng(htmlRef.current, {
+      if (document.fonts?.ready) await document.fonts.ready;
+      await new Promise(r => setTimeout(r, 100));
+      const dataUrl = await toPng(containerRef.current, {
         pixelRatio: 1,
         backgroundColor: 'white',
-        useCORS: true
+        useCORS: true,
+        cacheBust: true
       });
       onReady(dataUrl);
     } catch (error) {
-      console.error('html-to-image failed', error);
+      console.error('Headless capture failed', error);
     }
   }, [onReady]);
 
   useEffect(() => {
-    if (isHtmlMode) return undefined;
+    if (htmlReady) {
+      captureBoth();
+    }
+  }, [htmlReady, captureBoth, record, state, width, height]);
 
-    let cancelled = false;
-    const capture = async () => {
-      try {
-        if (document.fonts?.ready) {
-          await document.fonts.ready;
-        }
-      } catch (error) {
-        console.warn('Font readiness check failed', error);
-      }
-
-      requestAnimationFrame(() => {
-        window.setTimeout(() => {
-          if (cancelled || !stageRef.current) {
-            return;
-          }
-
-          onReady(stageRef.current.toDataURL({ pixelRatio: 1 }));
-        }, 300);
-      });
-    };
-
-    capture();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isHtmlMode, onReady, pageItems, record, state, width, height]);
-
-  if (isHtmlMode) {
-    return (
-      <div ref={htmlRef} style={{ width, height, position: 'absolute', backgroundColor: 'white' }}>
+  return (
+    <div ref={containerRef} style={{ width, height, position: 'absolute', backgroundColor: 'white' }}>
+      <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
         <HtmlLabel
-          html={state?.htmlContent || ''}
+          html={activeLayout.htmlContent || ''}
           record={record}
           width={width}
           height={height}
           canvasBorder={state?.canvasBorder}
           canvasBorderThickness={state?.canvasBorderThickness}
-          onRenderComplete={captureHtml}
+          onRenderComplete={() => setHtmlReady(true)}
         />
       </div>
-    );
-  }
-
-  return (
-    <Stage ref={stageRef} width={width} height={height}>
-      <Layer>
-        <Rect x={0} y={0} width={width} height={height} fill="white" listening={false} />
-        {renderCanvasBorder(state)}
-        {pageItems.map((item) => (
-          <CanvasItemNode
-            key={item.id}
-            item={item}
-            record={record}
-            canvasWidth={width}
-            canvasHeight={height}
-          />
-        ))}
-      </Layer>
-    </Stage>
+      <div style={{ position: 'absolute', inset: 0, zIndex: 2 }}>
+        <Stage ref={stageRef} width={width} height={height}>
+          <Layer>
+            <Rect x={0} y={0} width={width} height={height} fill="transparent" listening={false} />
+            {renderCanvasBorder(state)}
+            {pageItems.map((item) => (
+              <CanvasItemNode
+                key={item.id}
+                item={item}
+                record={record}
+                canvasWidth={width}
+                canvasHeight={height}
+              />
+            ))}
+          </Layer>
+        </Stage>
+      </div>
+    </div>
   );
 }

@@ -4,6 +4,7 @@ import { useStore } from '../store';
 import CanvasItemNode from './CanvasItemNode';
 import FloatingToolbar from './FloatingToolbar';
 import HtmlLabel from './HtmlLabel';
+import { toPng } from 'html-to-image';
 
 const WORKSPACE_PAD = 40;
 const SNAP_T = 10;
@@ -32,9 +33,7 @@ export default function CanvasArea() {
     selectedPagesForPrint,
     printPages,
     selectedPrinterInfo,
-    currentDpi,
-    designMode,
-    htmlContent
+    currentDpi
   } = useStore();
 
   const { splitMode } = useStore();
@@ -43,37 +42,36 @@ export default function CanvasArea() {
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
   const trRef = useRef(null);
   const containerRef = useRef(null);
-  const localStageRef = useRef(null);
-  const localPreviewRef = useRef(null);
+  const previewWrapperRefs = useRef({}); 
   const cvThick = canvasBorderThickness || 4;
-  const isHtmlMode = designMode === 'html';
+  const pageLayouts = useStore((state) => state.pageLayouts) || [];
 
   useEffect(() => {
     window.__getStageB64 = async () => {
-      if (designMode === 'html' && localPreviewRef.current) {
-        try {
-          return await import('html-to-image').then(m => m.toPng(localPreviewRef.current, {
-            pixelRatio: 1,
-            backgroundColor: 'white'
-          }));
-        } catch (e) {
-          console.error('Failed to capture HTML preview', e);
-          return null;
-        }
+      const firstWrapper = previewWrapperRefs.current[0];
+      if (firstWrapper) {
+         try {
+           return await toPng(firstWrapper, { pixelRatio: 1, backgroundColor: 'white', cacheBust: true });
+         } catch (e) {
+           console.error('Failed to capture Stage preview', e);
+           return null;
+         }
       }
-      const stage = localStageRef.current;
-      return stage ? stage.toDataURL({ pixelRatio: 1 / Math.max(zoomScale, 0.1) }) : null;
+      return null;
     };
     return () => { delete window.__getStageB64; };
-  }, [designMode, zoomScale]);
+  }, []);
   const dotsPerMm = (currentDpi || settings.default_dpi || 203) / 25.4;
   const printPx = selectedPrinterInfo?.width_px || Math.round((settings.print_width_mm || 48) * dotsPerMm);
   const batchRecords = useStore((state) => state.batchRecords) || [{}];
   const visibleRecords = batchRecords.slice(0, 10);
-  const maxPage = isHtmlMode ? 0 : items.reduce((max, item) => Math.max(max, Number(item.pageIndex ?? 0)), 0);
-  const maxDisplayedPage = isHtmlMode ? 0 : Math.max(maxPage, currentPage);
-  const pages = isHtmlMode ? [0] : Array.from({ length: maxDisplayedPage + 1 }, (_, index) => index);
-  const selectedItem = isHtmlMode ? null : items.find((item) => item.id === selectedId);
+  
+  const maxItemPage = items.reduce((max, item) => Math.max(max, Number(item.pageIndex ?? 0)), 0);
+  const maxLayoutPage = pageLayouts.reduce((max, l) => Math.max(max, Number(l.pageIndex ?? 0)), 0);
+  const maxDisplayedPage = Math.max(maxItemPage, maxLayoutPage, currentPage);
+  const pages = Array.from({ length: maxDisplayedPage + 1 }, (_, index) => index);
+  
+  const selectedItem = items.find((item) => item.id === selectedId);
 
   useEffect(() => {
     if (!trRef.current) return;
@@ -249,49 +247,51 @@ export default function CanvasArea() {
             )}
 
             {pages.map((pageIndex, pageIdx) => {
-              const pageItems = items.filter((item) => Number(item.pageIndex ?? 0) === pageIndex);
-              const visualPageIndex = isHtmlMode ? rIdx : pageIndex;
-              const visualPageDisplayNum = isHtmlMode ? (rIdx + 1) : (pageIdx + 1);
-              const isActive = currentPage === visualPageIndex;
-              const showControls = isHtmlMode ? true : (rIdx === 0);
-              const isSelectedForPrint = selectedPagesForPrint.includes(visualPageIndex);
+              let pageItems = items.filter((item) => Number(item.pageIndex ?? 0) === pageIndex);
+              let layout = pageLayouts.find(l => l.pageIndex === pageIndex);
+              
+              if (!layout && pageIndex > maxLayoutPage) layout = pageLayouts[pageLayouts.length - 1] || { htmlContent: '' };
+              if (pageItems.length === 0 && pageIndex > maxItemPage) pageItems = items.filter((item) => Number(item.pageIndex ?? 0) === maxItemPage);
+
+              const isActive = currentPage === pageIndex;
+              const showControls = (rIdx === 0);
+              const isSelectedForPrint = selectedPagesForPrint.includes(pageIndex);
 
               return (
                 <div key={`${rIdx}-${pageIndex}`} className="flex flex-col items-center gap-2 relative">
                   <div className="flex items-center justify-between w-full px-2 mb-2">
                     <div className="flex items-center gap-2">
-                      {(isHtmlMode ? batchRecords.length > 1 : pages.length > 1) && (
+                      {(pages.length > 1) && (
                         <input
                           type="checkbox"
                           checked={isSelectedForPrint}
-                          onChange={() => togglePageForPrint(visualPageIndex)}
+                          onChange={() => togglePageForPrint(pageIndex)}
                           className="w-3.5 h-3.5 cursor-pointer accent-blue-600"
                           title="Select for batch printing"
                         />
                       )}
                       <span className="text-neutral-400 dark:text-neutral-500 text-[10px] uppercase tracking-widest font-bold">
-                        Label {visualPageDisplayNum} {isActive && '(Active)'}
-                        {isHtmlMode && rIdx === 9 && batchRecords.length > 10 && ` (Preview capped at 10)`}
+                        Label {pageIdx + 1} {isActive && '(Active)'}
                       </span>
                     </div>
                     {showControls && (
                       <div className="flex gap-3">
                         <button
-                          onClick={() => printPages([visualPageIndex])}
+                          onClick={() => printPages([pageIndex])}
                           className="text-[10px] text-emerald-600 dark:text-emerald-500 hover:text-emerald-700 dark:hover:text-emerald-400 uppercase font-bold tracking-widest transition-colors"
                           title="Print only this label"
                         >
                           Print
                         </button>
                         <button
-                          onClick={() => useStore.getState().duplicatePage(visualPageIndex)}
+                          onClick={() => useStore.getState().duplicatePage(pageIndex)}
                           className="text-[10px] text-blue-500 hover:text-blue-600 uppercase font-bold tracking-widest transition-colors"
                         >
                           Duplicate
                         </button>
-                        {(isHtmlMode ? batchRecords.length > 1 : pages.length > 1) && (
+                        {(pages.length > 1) && (
                           <button
-                            onClick={() => deletePage(visualPageIndex)}
+                            onClick={() => deletePage(pageIndex)}
                             className="text-[10px] text-red-500 hover:text-red-600 uppercase font-bold tracking-widest transition-colors"
                           >
                             Delete
@@ -612,7 +612,7 @@ export default function CanvasArea() {
         onClick={addPage}
         className="py-3 px-8 border-2 border-dashed border-neutral-300 dark:border-neutral-700 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors rounded text-xs uppercase tracking-widest font-bold"
       >
-        + Add New {isHtmlMode ? 'Data Record' : 'Label'}
+        + Add New Label Page
       </button>
 
       <div className="text-neutral-400 dark:text-neutral-600 text-[10px] uppercase tracking-widest sticky bottom-0 bg-neutral-100 dark:bg-neutral-900/90 py-1 z-10">

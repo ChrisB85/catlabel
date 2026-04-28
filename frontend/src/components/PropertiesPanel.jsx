@@ -130,7 +130,7 @@ const ToggleBtn = ({ icon: Icon, active, onClick, label }) => (
 );
 
 export default function PropertiesPanel() {
-  const { items, selectedId, updateItem, deleteItem, canvasWidth, canvasHeight, canvasBorder, setCanvasBorder, canvasBorderThickness, setCanvasBorderThickness, setCanvasSize, getMmToPx, getPxToMm, settings, updateSettingsAPI, fonts, uploadFont, isRotated, setIsRotated, splitMode, setSplitMode, printerProfile, selectedPrinter, selectedPrinterInfo, batchRecords, setBatchRecords, updateBatchRecord, addBatchRecord, removeBatchRecord, generateBatchMatrix, generateBatchSequence, designMode, setDesignMode, htmlContent, setHtmlContent, activeTemplate, updateTemplateParams, ejectTemplate } = useStore();
+  const { items, selectedId, updateItem, deleteItem, canvasWidth, canvasHeight, canvasBorder, setCanvasBorder, canvasBorderThickness, setCanvasBorderThickness, setCanvasSize, getMmToPx, getPxToMm, settings, updateSettingsAPI, fonts, uploadFont, isRotated, setIsRotated, splitMode, setSplitMode, printerProfile, selectedPrinter, selectedPrinterInfo, batchRecords, setBatchRecords, updateBatchRecord, addBatchRecord, removeBatchRecord, generateBatchMatrix, generateBatchSequence, pageLayouts, currentPage, setHtmlContent, updateTemplateParams, ejectTemplate } = useStore();
   const selectedItem = items.find(i => i.id === selectedId);
   const isPreCut = selectedPrinterInfo?.media_type === 'pre-cut';
   const pInfo = selectedPrinterInfo || {};
@@ -151,10 +151,14 @@ export default function PropertiesPanel() {
   const [matrixInputs, setMatrixInputs] = useState({});
   const [seqInputs, setSeqInputs] = useState({ varName: '', start: 1, end: 10, prefix: '', suffix: '', padding: 3 });
   
+  const currentLayout = pageLayouts.find(l => l.pageIndex === currentPage) || { htmlContent: '', activeTemplate: null };
+  const activeTemplate = currentLayout.activeTemplate;
+  const htmlContent = currentLayout.htmlContent;
+
   // Automatically switch tabs based on selection
   useEffect(() => {
-    if (selectedItem || designMode === 'html') setActiveTab('element');
-  }, [selectedId, selectedItem, designMode]);
+    if (selectedItem) setActiveTab('element');
+  }, [selectedId, selectedItem]);
 
   // Local settings state for explicit DB saving
   const [localSettings, setLocalSettings] = useState(settings);
@@ -349,7 +353,7 @@ export default function PropertiesPanel() {
     return `${directValues} ${childValues}`;
   };
 
-  const templateStr = items.map((item) => collectItemTemplateValues(item)).join(' ') + (designMode === 'html' ? ` ${htmlContent}` : '');
+  const templateStr = items.map((item) => collectItemTemplateValues(item)).join(' ') + ' ' + pageLayouts.map(l => l.htmlContent).join(' ');
   const templateMatches = templateStr.match(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g) || [];
   const templateKeys = templateMatches.map((match) => match.replace(/[{}]/g, '').trim());
   const existingKeys = batchRecords.flatMap((record) => Object.keys(record || {}));
@@ -381,14 +385,12 @@ export default function PropertiesPanel() {
       <div className="flex border-b border-neutral-200 dark:border-neutral-800">
         <button 
           onClick={() => setActiveTab('element')}
-          disabled={designMode !== 'html' && !selectedItem}
           className={`flex-1 flex justify-center py-4 transition-colors relative group
-            ${designMode !== 'html' && !selectedItem ? 'text-neutral-300 dark:text-neutral-700 cursor-not-allowed' : 
-            activeTab === 'element' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50 dark:bg-blue-900/20' : 'text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-900'}
+            ${activeTab === 'element' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50 dark:bg-blue-900/20' : 'text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-900'}
           `}
         >
           <Sliders size={20} />
-          <span className="absolute top-full mt-1 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 z-50 pointer-events-none whitespace-nowrap font-bold uppercase tracking-widest">Element</span>
+          <span className="absolute top-full mt-1 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 z-50 pointer-events-none whitespace-nowrap font-bold uppercase tracking-widest">Element / Layout</span>
         </button>
         
         <button 
@@ -427,32 +429,6 @@ export default function PropertiesPanel() {
         {/* === CANVAS & PRINTER TAB === */}
         {activeTab === 'canvas' && (
           <>
-            <div className="space-y-4">
-              <h2 className="text-lg font-serif tracking-tight text-neutral-900 dark:text-white pb-2 border-b border-neutral-100 dark:border-neutral-800">Design Mode</h2>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setDesignMode('canvas')}
-                  className={`flex-1 py-2 text-[10px] uppercase font-bold tracking-widest border transition-colors ${
-                    designMode === 'canvas'
-                      ? 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400'
-                      : 'bg-neutral-50 text-neutral-500 border-transparent dark:bg-neutral-900 hover:bg-neutral-100 dark:hover:bg-neutral-800'
-                  }`}
-                >
-                  Canvas (WYSIWYG)
-                </button>
-                <button
-                  onClick={() => setDesignMode('html')}
-                  className={`flex-1 py-2 text-[10px] uppercase font-bold tracking-widest border transition-colors ${
-                    designMode === 'html'
-                      ? 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400'
-                      : 'bg-neutral-50 text-neutral-500 border-transparent dark:bg-neutral-900 hover:bg-neutral-100 dark:hover:bg-neutral-800'
-                  }`}
-                >
-                  HTML/CSS
-                </button>
-              </div>
-            </div>
-
             <div className="space-y-4">
               <h2 className="text-lg font-serif tracking-tight text-neutral-900 dark:text-white pb-2 border-b border-neutral-100 dark:border-neutral-800">Dimensions</h2>
               
@@ -703,7 +679,7 @@ export default function PropertiesPanel() {
         {/* === ELEMENT TAB === */}
         {activeTab === 'element' && (
           <>
-            {designMode === 'html' ? (
+            {!selectedItem ? (
               <div className="space-y-4 h-full flex flex-col">
                 {activeTemplate ? (
                   <>
@@ -804,7 +780,7 @@ export default function PropertiesPanel() {
                 ) : (
                   <>
                     <div className="flex items-center justify-between pb-2 border-b border-neutral-100 dark:border-neutral-800">
-                      <h2 className="text-lg font-serif tracking-tight text-neutral-900 dark:text-white">Raw HTML Editor</h2>
+                      <h2 className="text-lg font-serif tracking-tight text-neutral-900 dark:text-white">Background Layout (HTML)</h2>
                       <button onClick={() => handleFormatHtml('designMode')} className="text-[10px] text-blue-600 bg-blue-50 px-2 py-1 rounded font-bold uppercase hover:bg-blue-100 transition-colors">
                         Auto-Format
                       </button>

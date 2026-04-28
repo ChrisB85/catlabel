@@ -61,9 +61,7 @@ const buildCanvasStateSnapshot = (state) => ({
   splitMode: state.splitMode,
   canvasBorder: state.canvasBorder,
   canvasBorderThickness: state.canvasBorderThickness,
-  designMode: state.designMode,
-  htmlContent: state.htmlContent,
-  activeTemplate: state.activeTemplate,
+  pageLayouts: state.pageLayouts,
   items: state.items,
   currentPage: state.currentPage,
   batchRecords: state.batchRecords,
@@ -108,7 +106,7 @@ export default function AIAssistant() {
   const resetAiChat = useStore((state) => state.resetAiChat);
   const setShowAiConfig = useStore((state) => state.setShowAiConfig);
   const items = useStore((state) => state.items);
-  const htmlContent = useStore((state) => state.htmlContent);
+  const pageLayouts = useStore((state) => state.pageLayouts) || [];
 
   const aiMode = useStore((state) => state.aiMode);
   const setAiMode = useStore((state) => state.setAiMode);
@@ -134,7 +132,7 @@ export default function AIAssistant() {
   const [promptCopied, setPromptCopied] = useState(false);
   const [imageCopied, setImageCopied] = useState(false);
 
-  const isEmpty = items.length === 0 && (!htmlContent || htmlContent.trim() === '');
+  const isEmpty = items.length === 0 && pageLayouts.every(l => !l.htmlContent || l.htmlContent.trim() === '');
 
   useEffect(() => {
     if (aiMode === 'live') {
@@ -298,17 +296,8 @@ export default function AIAssistant() {
 
     const store = useStore.getState();
 
-    if (canvasState.activeTemplate) {
-      store.setTemplateConfig(
-        canvasState.activeTemplate.id,
-        canvasState.activeTemplate.params || {}
-      );
-    } else {
-      if (canvasState.designMode === 'html') {
-        store.ejectTemplate();
-      }
-      store.setDesignMode(canvasState.designMode || 'canvas');
-      store.setHtmlContent(canvasState.htmlContent || '');
+    if (canvasState.pageLayouts) {
+      useStore.setState({ pageLayouts: canvasState.pageLayouts });
     }
 
     store.setItems(canvasState.items || []);

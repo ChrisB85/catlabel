@@ -25,50 +25,42 @@ const buildTemplateHtml = (templateId, params = {}, width = 384, height = 384) =
 
 const normalizeCanvasState = (canvasState = {}) => {
   const items = Array.isArray(canvasState.items) ? canvasState.items : [];
-  const activeTemplate = canvasState.activeTemplate;
+  let pageLayouts = canvasState.pageLayouts;
 
-  if (activeTemplate?.id) {
-    return {
-      ...canvasState,
-      designMode: 'html',
-      activeTemplate: {
-        id: activeTemplate.id,
-        params: activeTemplate.params || {}
-      },
-      htmlContent: buildTemplateHtml(
-        activeTemplate.id,
-        activeTemplate.params || {},
-        canvasState.width || 384,
-        canvasState.height || 384
-      ),
-      items
-    };
+  // Migration from old single-template/HTML structure
+  if (!pageLayouts || pageLayouts.length === 0) {
+    const activeTemplate = canvasState.activeTemplate || null;
+    const htmlContent = canvasState.htmlContent || '';
+    
+    if (activeTemplate?.id) {
+      pageLayouts = [{
+        pageIndex: 0,
+        activeTemplate,
+        htmlContent: buildTemplateHtml(activeTemplate.id, activeTemplate.params || {}, canvasState.width || 384, canvasState.height || 384)
+      }];
+    } else {
+      pageLayouts = [{ pageIndex: 0, htmlContent, activeTemplate: null }];
+    }
   }
 
-  const legacyTemplateItem = items.length === 1 && items[0]?.type === 'label_template'
-    ? items[0]
-    : null;
-
+  const legacyTemplateItem = items.length === 1 && items[0]?.type === 'label_template' ? items[0] : null;
   if (legacyTemplateItem) {
     const templateId = legacyTemplateItem.template_id || 'centered_text';
     const params = legacyTemplateItem.params || {};
     return {
       ...canvasState,
-      designMode: 'html',
-      activeTemplate: { id: templateId, params },
-      htmlContent: buildTemplateHtml(
-        templateId,
-        params,
-        canvasState.width || 384,
-        canvasState.height || 384
-      ),
+      pageLayouts: [{
+        pageIndex: 0,
+        activeTemplate: { id: templateId, params },
+        htmlContent: buildTemplateHtml(templateId, params, canvasState.width || 384, canvasState.height || 384)
+      }],
       items: []
     };
   }
 
   return {
     ...canvasState,
-    activeTemplate: null
+    pageLayouts
   };
 };
 
@@ -95,7 +87,7 @@ const withHistory = (config) => {
       clearTimeout(historyTimeout);
       historyTimeout = setTimeout(() => {
         const finalState = get();
-        const relevantKeys = ['items', 'canvasWidth', 'canvasHeight', 'isRotated', 'splitMode', 'canvasBorder', 'canvasBorderThickness', 'designMode', 'htmlContent', 'activeTemplate'];
+        const relevantKeys = ['items', 'canvasWidth', 'canvasHeight', 'isRotated', 'splitMode', 'canvasBorder', 'canvasBorderThickness', 'pageLayouts'];
         let changed = false;
 
         for (const key of relevantKeys) {
@@ -198,30 +190,47 @@ export const useStore = create(withHistory((set, get) => ({
   isRotated: false,
   selectedPrinter: null,
   selectedPrinterInfo: null,
-  designMode: 'canvas',
-  htmlContent: '',
-  activeTemplate: null,
+  pageLayouts: [{ pageIndex: 0, htmlContent: '', activeTemplate: null }],
   showAiConfig: false,
   setShowAiConfig: (val) => set({ showAiConfig: val }),
-  setDesignMode: (val) => set((state) => ({
-    designMode: val,
-    ...(val === 'canvas' ? { activeTemplate: null } : {})
-  })),
-  setHtmlContent: (val) => set({ htmlContent: val }),
-  setTemplateConfig: (id, params = {}) => set((state) => ({
-    designMode: 'html',
-    activeTemplate: { id, params },
-    htmlContent: buildTemplateHtml(id, params, state.canvasWidth, state.canvasHeight)
-  })),
-  updateTemplateParams: (newParams) => set((state) => {
-    if (!state.activeTemplate) return state;
-    const params = { ...state.activeTemplate.params, ...newParams };
-    return {
-      activeTemplate: { ...state.activeTemplate, params },
-      htmlContent: buildTemplateHtml(state.activeTemplate.id, params, state.canvasWidth, state.canvasHeight)
-    };
+  
+  setHtmlContent: (val) => set((state) => {
+    const layouts = [...state.pageLayouts];
+    const idx = layouts.findIndex(l => l.pageIndex === state.currentPage);
+    if (idx >= 0) layouts[idx] = { ...layouts[idx], htmlContent: val, activeTemplate: null };
+    else layouts.push({ pageIndex: state.currentPage, htmlContent: val, activeTemplate: null });
+    return { pageLayouts: layouts };
   }),
-  ejectTemplate: () => set({ activeTemplate: null }),
+  
+  setTemplateConfig: (id, params = {}) => set((state) => ({
+    pageLayouts: [...state.pageLayouts.filter(l => l.pageIndex !== state.currentPage), {
+      pageIndex: state.currentPage,
+      activeTemplate: { id, params },
+      htmlContent: buildTemplateHtml(id, params, state.canvasWidth, state.canvasHeight)
+    }]
+  })),
+  
+  updateTemplateParams: (newParams) => set((state) => {
+    const layout = state.pageLayouts.find(l => l.pageIndex === state.currentPage);
+    if (!layout || !layout.activeTemplate) return state;
+    const params = { ...layout.activeTemplate.params, ...newParams };
+    
+    const layouts = [...state.pageLayouts];
+    const idx = layouts.findIndex(l => l.pageIndex === state.currentPage);
+    layouts[idx] = {
+      ...layout,
+      activeTemplate: { ...layout.activeTemplate, params },
+      htmlContent: buildTemplateHtml(layout.activeTemplate.id, params, state.canvasWidth, state.canvasHeight)
+    };
+    return { pageLayouts: layouts };
+  }),
+  
+  ejectTemplate: () => set((state) => {
+    const layouts = [...state.pageLayouts];
+    const idx = layouts.findIndex(l => l.pageIndex === state.currentPage);
+    if (idx >= 0) layouts[idx] = { ...layouts[idx], activeTemplate: null };
+    return { pageLayouts: layouts };
+  }),
   getStageB64: async () => {
     if (typeof window !== 'undefined' && window.__getStageB64) {
       return await window.__getStageB64();
@@ -267,43 +276,21 @@ export const useStore = create(withHistory((set, get) => ({
   setCurrentPage: (idx) => set({ currentPage: Math.max(0, Number(idx) || 0), selectedId: null, selectedIds: [] }),
   
   addPage: () => set((state) => {
-    if (state.designMode === 'html') {
-      const newRecords = [...(state.batchRecords || [{}]), {}];
-      return {
-        batchRecords: newRecords,
-        currentPage: newRecords.length - 1,
-        selectedId: null,
-        selectedIds: []
-      };
-    }
-
     const maxPage = Math.max(
       state.currentPage,
-      ...state.items.map((item) => Number(item.pageIndex ?? 0))
+      ...state.items.map((item) => Number(item.pageIndex ?? 0)),
+      ...state.pageLayouts.map((l) => Number(l.pageIndex ?? 0))
     );
-    return { currentPage: maxPage + 1, selectedId: null, selectedIds: [] };
+    return { 
+      currentPage: maxPage + 1, 
+      pageLayouts: [...state.pageLayouts, { pageIndex: maxPage + 1, htmlContent: '', activeTemplate: null }],
+      selectedId: null, 
+      selectedIds: [] 
+    };
   }),
   
   deletePage: (pageIndex) => set((state) => {
     const targetPage = Math.max(0, Number(pageIndex) || 0);
-
-    if (state.designMode === 'html') {
-      let newRecords = state.batchRecords.filter((_, i) => i !== targetPage);
-      if (newRecords.length === 0) newRecords = [{}];
-      const nextCurrent = state.currentPage >= newRecords.length ? newRecords.length - 1 : state.currentPage;
-
-      const newSelectedPages = state.selectedPagesForPrint
-        .filter((p) => p !== targetPage)
-        .map((p) => (p > targetPage ? p - 1 : p));
-
-      return {
-        batchRecords: newRecords,
-        currentPage: Math.max(0, nextCurrent),
-        selectedId: null,
-        selectedIds: [],
-        selectedPagesForPrint: newSelectedPages
-      };
-    }
 
     const newItems = state.items
       .filter((item) => Number(item.pageIndex ?? 0) !== targetPage)
@@ -311,6 +298,12 @@ export const useStore = create(withHistory((set, get) => ({
         const itemPage = Number(item.pageIndex ?? 0);
         return itemPage > targetPage ? { ...item, pageIndex: itemPage - 1 } : item;
       });
+      
+    const newLayouts = state.pageLayouts
+      .filter(l => l.pageIndex !== targetPage)
+      .map(l => l.pageIndex > targetPage ? { ...l, pageIndex: l.pageIndex - 1 } : l);
+    
+    if (newLayouts.length === 0) newLayouts.push({ pageIndex: 0, htmlContent: '', activeTemplate: null });
 
     const adjustedCurrentPage = state.currentPage > targetPage
       ? state.currentPage - 1
@@ -324,6 +317,7 @@ export const useStore = create(withHistory((set, get) => ({
 
     return {
       items: newItems,
+      pageLayouts: newLayouts,
       currentPage: adjustedCurrentPage,
       selectedId: null,
       selectedIds: [],
@@ -334,24 +328,13 @@ export const useStore = create(withHistory((set, get) => ({
   duplicatePage: (pageIndex) => set((state) => {
     const targetPage = Math.max(0, Number(pageIndex) || 0);
 
-    if (state.designMode === 'html') {
-      const recordToClone = state.batchRecords[targetPage] || {};
-      const newRecords = [...state.batchRecords];
-      newRecords.splice(targetPage + 1, 0, { ...recordToClone });
-      return {
-        batchRecords: newRecords,
-        currentPage: targetPage + 1,
-        selectedId: null,
-        selectedIds: []
-      };
-    }
-
     const itemsToClone = state.items.filter((item) => Number(item.pageIndex ?? 0) === targetPage);
-    if (!itemsToClone.length) return state;
-
+    const layoutToClone = state.pageLayouts.find(l => l.pageIndex === targetPage) || { htmlContent: '' };
+    
     const maxPage = Math.max(
       state.currentPage,
-      ...state.items.map((item) => Number(item.pageIndex ?? 0))
+      ...state.items.map((item) => Number(item.pageIndex ?? 0)),
+      ...state.pageLayouts.map((l) => Number(l.pageIndex ?? 0))
     );
     const newPageIdx = maxPage + 1;
 
@@ -363,6 +346,7 @@ export const useStore = create(withHistory((set, get) => ({
 
     return {
       items: [...state.items, ...clones],
+      pageLayouts: [...state.pageLayouts, { ...layoutToClone, pageIndex: newPageIdx }],
       currentPage: newPageIdx,
       selectedId: null,
       selectedIds: []
@@ -409,15 +393,9 @@ export const useStore = create(withHistory((set, get) => ({
     let finalBatchRecords = state.batchRecords || [{}];
     let finalPageIndices = normalizedPageIndices;
 
-    if (state.designMode === 'html') {
-      finalBatchRecords = (state.batchRecords || [{}]).filter((_, i) => normalizedPageIndices.includes(i));
-      finalPageIndices = [0];
-      itemsToPrint = [];
-    } else {
-      itemsToPrint = state.items.filter((item) =>
-        normalizedPageIndices.includes(Number(item.pageIndex ?? 0))
-      );
-    }
+    itemsToPrint = state.items.filter((item) =>
+      normalizedPageIndices.includes(Number(item.pageIndex ?? 0))
+    );
 
     set({
       isPreparingForPrint: true,
@@ -435,9 +413,7 @@ export const useStore = create(withHistory((set, get) => ({
           canvasBorder: state.canvasBorder,
           canvasBorderThickness: state.canvasBorderThickness || 4,
           splitMode: state.splitMode,
-          designMode: state.designMode,
-          htmlContent: state.htmlContent,
-          activeTemplate: state.activeTemplate,
+          pageLayouts: state.pageLayouts,
           items: itemsToPrint
         }
       }
@@ -747,10 +723,9 @@ export const useStore = create(withHistory((set, get) => ({
             width: state.canvasWidth, height: state.canvasHeight,
             isRotated: state.isRotated, canvasBorder: state.canvasBorder,
             canvasBorderThickness: thickness, splitMode: state.splitMode,
-            designMode: state.designMode, htmlContent: state.htmlContent,
+            pageLayouts: state.pageLayouts,
             items: state.items, currentPage: state.currentPage,
-            batchRecords, printCopies,
-            activeTemplate: state.activeTemplate
+            batchRecords, printCopies
           }
         })
       });
@@ -773,10 +748,9 @@ export const useStore = create(withHistory((set, get) => ({
         width: state.canvasWidth, height: state.canvasHeight,
         isRotated: state.isRotated, canvasBorder: state.canvasBorder,
         canvasBorderThickness: thickness, splitMode: state.splitMode,
-        designMode: state.designMode, htmlContent: state.htmlContent,
+        pageLayouts: state.pageLayouts,
         items: state.items, currentPage: state.currentPage,
-        batchRecords, printCopies,
-        activeTemplate: state.activeTemplate
+        batchRecords, printCopies
       }
     };
     if (newName) payload.name = newName;
@@ -817,9 +791,7 @@ export const useStore = create(withHistory((set, get) => ({
       canvasBorder: s.canvasBorder || 'none',
       canvasBorderThickness: s.canvasBorderThickness || 4,
       splitMode: s.splitMode || false,
-      designMode: s.designMode || 'canvas',
-      htmlContent: s.htmlContent || '',
-      activeTemplate: s.activeTemplate || null,
+      pageLayouts: s.pageLayouts || [{ pageIndex: 0, htmlContent: '', activeTemplate: null }],
       isRotated: s.isRotated || false,
       batchRecords,
       printCopies: s.printCopies || 1,
@@ -876,16 +848,10 @@ export const useStore = create(withHistory((set, get) => ({
       isRotated,
       splitMode,
       canvasBorder: preset.border || 'none',
-      ...(state.activeTemplate
-        ? {
-            htmlContent: buildTemplateHtml(
-              state.activeTemplate.id,
-              state.activeTemplate.params,
-              nextCanvasWidth,
-              nextCanvasHeight
-            )
-          }
-        : {}),
+      pageLayouts: state.pageLayouts.map(l => l.activeTemplate ? {
+        ...l,
+        htmlContent: buildTemplateHtml(l.activeTemplate.id, l.activeTemplate.params, nextCanvasWidth, nextCanvasHeight)
+      } : l),
       items: recalcAutoFit(state.items, state.batchRecords, nextCanvasWidth, nextCanvasHeight)
     };
   }),
@@ -976,16 +942,10 @@ export const useStore = create(withHistory((set, get) => ({
         isRotated: val,
         canvasWidth: nextCanvasWidth,
         canvasHeight: nextCanvasHeight,
-        ...(state.activeTemplate
-          ? {
-              htmlContent: buildTemplateHtml(
-                state.activeTemplate.id,
-                state.activeTemplate.params,
-                nextCanvasWidth,
-                nextCanvasHeight
-              )
-            }
-          : {}),
+        pageLayouts: state.pageLayouts.map(l => l.activeTemplate ? {
+          ...l,
+          htmlContent: buildTemplateHtml(l.activeTemplate.id, l.activeTemplate.params, nextCanvasWidth, nextCanvasHeight)
+        } : l),
         items: recalcAutoFit(state.items, state.batchRecords, nextCanvasWidth, nextCanvasHeight)
       };
     }
@@ -1077,16 +1037,10 @@ export const useStore = create(withHistory((set, get) => ({
       canvasHeight: newH,
       isRotated: rot,
       canvasBorder: border,
-      ...(currentState.activeTemplate
-        ? {
-            htmlContent: buildTemplateHtml(
-              currentState.activeTemplate.id,
-              currentState.activeTemplate.params,
-              newW,
-              newH
-            )
-          }
-        : {})
+      pageLayouts: currentState.pageLayouts.map(l => l.activeTemplate ? {
+        ...l,
+        htmlContent: buildTemplateHtml(l.activeTemplate.id, l.activeTemplate.params, newW, newH)
+      } : l)
     });
 
     if (!mac) {
@@ -1232,9 +1186,7 @@ export const useStore = create(withHistory((set, get) => ({
     currentPage: 0, 
     selectedPagesForPrint: [], 
     currentProjectId: null, 
-    designMode: 'canvas', 
-    htmlContent: '',
-    activeTemplate: null
+    pageLayouts: [{ pageIndex: 0, htmlContent: '', activeTemplate: null }]
     // We specifically omitted history wipes here so the user can Undo a canvas clear!
   }),
   
@@ -1272,23 +1224,16 @@ export const useStore = create(withHistory((set, get) => ({
   multiplyWorkspace: (copies) => set((state) => {
     const totalCopies = Math.max(1, Number(copies) || 1);
 
-    if (state.designMode === 'html') {
-      const newRecords = [...state.batchRecords];
-      const recordToClone = state.batchRecords[state.currentPage] || {};
-      for (let i = 0; i < totalCopies; i++) {
-        newRecords.push({ ...recordToClone });
-      }
-      return { batchRecords: newRecords };
-    }
-
     const currentItems = state.items.filter((item) => Number(item.pageIndex ?? 0) === state.currentPage);
-    if (!currentItems.length) return state;
+    const currentLayout = state.pageLayouts.find(l => l.pageIndex === state.currentPage) || { htmlContent: '' };
 
     const maxPage = Math.max(
       state.currentPage,
-      ...state.items.map((item) => Number(item.pageIndex ?? 0))
+      ...state.items.map((item) => Number(item.pageIndex ?? 0)),
+      ...state.pageLayouts.map((l) => Number(l.pageIndex ?? 0))
     );
     const newItems = [...state.items];
+    const newLayouts = [...state.pageLayouts];
 
     for (let i = 1; i <= totalCopies; i++) {
       const targetPage = maxPage + i;
@@ -1298,10 +1243,12 @@ export const useStore = create(withHistory((set, get) => ({
         pageIndex: targetPage
       }));
       newItems.push(...clones);
+      newLayouts.push({ ...currentLayout, pageIndex: targetPage });
     }
 
     return {
       items: newItems,
+      pageLayouts: newLayouts,
       selectedId: null
     };
   }),
@@ -1536,16 +1483,10 @@ export const useStore = create(withHistory((set, get) => ({
   setCanvasSize: (width, height) => set((state) => ({
     canvasWidth: width,
     canvasHeight: height,
-    ...(state.activeTemplate
-      ? {
-          htmlContent: buildTemplateHtml(
-            state.activeTemplate.id,
-            state.activeTemplate.params,
-            width,
-            height
-          )
-        }
-      : {}),
+    pageLayouts: state.pageLayouts.map(l => l.activeTemplate ? {
+      ...l,
+      htmlContent: buildTemplateHtml(l.activeTemplate.id, l.activeTemplate.params, width, height)
+    } : l),
     items: recalcAutoFit(state.items, state.batchRecords, width, height)
   })),
 })));
