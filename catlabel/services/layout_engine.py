@@ -1,12 +1,5 @@
 TEMPLATE_METADATA = [
     {
-        "id": "centered_text",
-        "category": "Layout",
-        "name": "Centered Text",
-        "description": "A single, perfectly auto-scaling text block.",
-        "fields": [{"name": "text", "label": "Main Text", "type": "textarea", "default": "Centered Text"}],
-    },
-    {
         "id": "title_subtitle",
         "category": "Layout",
         "name": "Title & Subtitle",
@@ -50,14 +43,25 @@ TEMPLATE_METADATA = [
         "id": "price_tag",
         "category": "Dedicated",
         "name": "Price Tag with Barcode",
-        "description": "Retail price tag. Automatically adapts to square or wide labels.",
+        "description": "Retail price tag with optional Barcode or QR code. Adapts to square or wide labels.",
         "fields": [
             {"name": "currency_symbol", "label": "Currency Symbol", "type": "text", "default": "$"},
             {"name": "price_main", "label": "Main Price", "type": "text", "default": "19"},
             {"name": "price_cents", "label": "Cents", "type": "text", "default": "99"},
             {"name": "unit", "label": "Unit (e.g. /ea)", "type": "text", "default": ""},
             {"name": "product_name", "label": "Product Name", "type": "text", "default": "Product Name"},
-            {"name": "barcode", "label": "Barcode (Leave blank to omit)", "type": "text", "default": "123456789"},
+            {
+                "name": "code_type",
+                "label": "Code Type",
+                "type": "select",
+                "options": [
+                    {"label": "Barcode", "value": "barcode"},
+                    {"label": "QR Code", "value": "qrcode"},
+                    {"label": "None", "value": "none"},
+                ],
+                "default": "barcode",
+            },
+            {"name": "code_data", "label": "Code Data", "type": "text", "default": "123456789"},
         ],
     },
     {
@@ -125,11 +129,22 @@ TEMPLATE_METADATA = [
         "id": "asset_tag",
         "category": "Dedicated",
         "name": "IT Asset Tag",
-        "description": "Header bar, QR code, and details.",
+        "description": "Header bar, QR/Barcode, and details.",
         "fields": [
             {"name": "department", "label": "Department", "type": "text", "default": "IT DEPT"},
             {"name": "asset_id", "label": "Asset ID", "type": "text", "default": "AST-0001"},
             {"name": "description", "label": "Description", "type": "text", "default": "Laptop Computer"},
+            {
+                "name": "code_type",
+                "label": "Code Type",
+                "type": "select",
+                "options": [
+                    {"label": "QR Code", "value": "qrcode"},
+                    {"label": "Barcode", "value": "barcode"},
+                    {"label": "None", "value": "none"},
+                ],
+                "default": "qrcode",
+            },
         ],
     },
     {
@@ -160,8 +175,8 @@ TEMPLATE_METADATA = [
         "description": "Prominent expiration date, optionally with product name and manufacturing date.",
         "fields": [
             {"name": "product_name", "label": "Product Name (Optional)", "type": "text", "default": ""},
-            {"name": "exp_date", "label": "Expiration Date", "type": "text", "default": "2025-12-31"},
-            {"name": "made_date", "label": "Mfg / Made On (Optional)", "type": "text", "default": ""},
+            {"name": "exp_date", "label": "Expiration Date", "type": "date", "default": "2025-12-31"},
+            {"name": "made_date", "label": "Mfg / Made On (Optional)", "type": "date", "default": ""},
         ],
     },
 ]

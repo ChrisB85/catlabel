@@ -137,7 +137,7 @@ export default function TemplateWizardModal({ template, onClose }) {
                 </div>
               ) : (
                 <input
-                  type="text"
+                  type={batchMode && field.type === 'date' ? 'text' : (field.type || 'text')}
                   value={formData[field.name] || ''}
                   onChange={(e) => setFormData({ ...formData, [field.name]: e.target.value })}
                   className={inputClass}

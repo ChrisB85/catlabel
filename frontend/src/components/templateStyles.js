@@ -41,19 +41,6 @@ const buildJarFarmhouseMarkup = ({ title = '', subtitle = '' }) => `
 
 export const TEMPLATE_METADATA = [
   {
-    id: 'centered_text',
-    category: 'Layout',
-    name: 'Centered Text',
-    description: 'A single, perfectly auto-scaling text block.',
-    fields: [{ name: 'text', label: 'Main Text', type: 'textarea', default: 'Centered Text' }],
-    html: (p) => `
-      <div class="label-canvas-container" style="padding: 4%;">
-        <div class="bound-box">
-          <div class="auto-text" style="font-weight: 900;">${p.text || p.title || ''}</div>
-        </div>
-      </div>`,
-  },
-  {
     id: 'title_subtitle',
     category: 'Layout',
     name: 'Title & Subtitle',
@@ -63,11 +50,11 @@ export const TEMPLATE_METADATA = [
       { name: 'subtitle', label: 'Subtitle', type: 'text', default: 'Subheading text goes here' },
     ],
     html: (p) => `
-      <div class="label-canvas-container" style="display: flex; flex-direction: column; padding: 4%; gap: 4%;">
+      <div class="label-canvas-container" style="display: flex; flex-direction: column; padding: 6%; gap: 4%;">
         <div class="bound-box" style="flex: 2.0;">
           <div class="auto-text" style="font-weight: 900; text-transform: uppercase; white-space: nowrap;">${p.title || ''}</div>
         </div>
-        <div style="height: 2px; background: black; width: 90%; margin: 0 auto; flex-shrink: 0;"></div>
+        <div style="height: 3px; background: black; width: 100%; margin: 2% auto; flex-shrink: 0;"></div>
         <div class="bound-box" style="flex: 1.0;">
           <div class="auto-text" style="font-weight: 700;">${p.subtitle || ''}</div>
         </div>
@@ -120,19 +107,19 @@ export const TEMPLATE_METADATA = [
       const qrHtml = p.data ? `<div class="catlabel-code" data-type="qrcode" data-value="${p.data}"></div>` : '';
 
       if (!qrHtml) {
-        return `<div class="label-canvas-container" style="padding: 4%;"><div class="bound-box"><div class="auto-text" style="font-weight: 900;">${p.text || ''}</div></div></div>`;
+        return `<div class="label-canvas-container" style="padding: 6%;"><div class="bound-box"><div class="auto-text" style="font-weight: 900; text-align: center;">${p.text || ''}</div></div></div>`;
       }
 
       if (isLandscape) {
         return `
           <div class="label-canvas-container" style="display: flex; flex-direction: row; padding: 4%; gap: 6%;">
-            <div style="flex: 0 1 35%; max-width: 35%; aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; margin: auto;">${qrHtml}</div>
+            <div style="flex: 0 0 40%; aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; margin: auto 0;">${qrHtml}</div>
             <div class="bound-box" style="flex: 1;"><div class="auto-text" style="font-weight: 900; text-align: left;">${p.text || ''}</div></div>
           </div>`;
       }
 
       return `
-        <div class="label-canvas-container" style="display: flex; flex-direction: column; padding: 4%; gap: 4%;">
+        <div class="label-canvas-container" style="display: flex; flex-direction: column; padding: 6%; gap: 4%;">
           <div style="flex: 0 1 45%; max-height: 45%; aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; margin: auto;">${qrHtml}</div>
           <div class="bound-box" style="flex: 1;"><div class="auto-text" style="font-weight: 900;">${p.text || ''}</div></div>
         </div>`;
@@ -149,10 +136,23 @@ export const TEMPLATE_METADATA = [
       { name: 'price_cents', label: 'Cents', type: 'text', default: '99' },
       { name: 'unit', label: 'Unit (e.g. /ea)', type: 'text', default: '' },
       { name: 'product_name', label: 'Product Name', type: 'text', default: 'Product Name' },
-      { name: 'barcode', label: 'Barcode (Leave blank to omit)', type: 'text', default: '123456789' },
+      {
+        name: 'code_type',
+        label: 'Code Type',
+        type: 'select',
+        options: [
+          { label: 'Barcode', value: 'barcode' },
+          { label: 'QR Code', value: 'qrcode' },
+          { label: 'None', value: 'none' },
+        ],
+        default: 'barcode',
+      },
+      { name: 'code_data', label: 'Code Data', type: 'text', default: '123456789' },
     ],
     html: (p, isLandscape) => {
-      const barcodeHtml = p.barcode ? `<div class="catlabel-code" data-type="barcode" data-format="code128" data-value="${p.barcode}"></div>` : '';
+      const hasCode = p.code_type && p.code_type !== 'none' && p.code_data;
+      const isQR = p.code_type === 'qrcode';
+      const codeHtml = hasCode ? `<div class="catlabel-code" data-type="${isQR ? 'qrcode' : 'barcode'}" data-format="code128" data-value="${p.code_data}"></div>` : '';
 
       if (isLandscape) {
         return `
@@ -170,12 +170,12 @@ export const TEMPLATE_METADATA = [
                 <div class="auto-text" style="font-weight: 800; text-transform: uppercase; white-space: nowrap;">${p.product_name || ''}</div>
               </div>
             </div>
-            ${barcodeHtml ? `<div class="bound-box" style="flex: 0 0 30%;">${barcodeHtml}</div>` : ''}
+            ${hasCode ? `<div class="bound-box" style="${isQR ? 'flex: 0 0 35%; aspect-ratio: 1/1; margin: auto 0;' : 'flex: 0.6; min-width: 0;'}">${codeHtml}</div>` : ''}
           </div>`;
       }
 
       return `
-        <div class="label-canvas-container" style="display: flex; flex-direction: column; padding: 4%; gap: 4%;">
+        <div class="label-canvas-container" style="display: flex; flex-direction: column; padding: 6%; gap: 4%;">
           <div style="flex: 1; display: flex; flex-direction: row; gap: 2%;">
             <div class="bound-box" style="flex: 0.2; align-items: flex-start;"><div class="auto-text" style="font-weight: 900;">${p.currency_symbol || ''}</div></div>
             <div class="bound-box" style="flex: 0.6;"><div class="auto-text" style="font-weight: 900; white-space: nowrap;">${p.price_main || ''}</div></div>
@@ -187,7 +187,7 @@ export const TEMPLATE_METADATA = [
           <div class="bound-box" style="flex: 0.3; border-top: 2px solid black; padding-top: 2%;">
             <div class="auto-text" style="font-weight: 800; text-transform: uppercase; white-space: nowrap;">${p.product_name || ''}</div>
           </div>
-          ${barcodeHtml ? `<div class="bound-box" style="flex: 0.5;">${barcodeHtml}</div>` : ''}
+          ${hasCode ? `<div class="bound-box" style="${isQR ? 'flex: 0 0 45%; aspect-ratio: 1/1; margin: 0 auto;' : 'flex: 0.6; min-height: 0;'}">${codeHtml}</div>` : ''}
         </div>`;
     },
   },
@@ -217,8 +217,8 @@ export const TEMPLATE_METADATA = [
       const codeHtml = p.code_data ? `<div class="catlabel-code" data-type="${isQR ? 'qrcode' : 'barcode'}" data-format="code128" data-value="${p.code_data}"></div>` : '';
       
       const codeContainerStyle = isLandscape
-        ? (isQR ? `flex: 0 1 40%; max-width: 40%; aspect-ratio: 1/1;` : `flex: 0.8;`)
-        : (isQR ? `flex: 0 1 45%; max-height: 45%; aspect-ratio: 1/1; margin: 0 auto;` : `flex: 0.8;`);
+        ? (isQR ? `flex: 0 0 40%; aspect-ratio: 1/1; margin: auto 0;` : `flex: 0.6; min-width: 0;`)
+        : (isQR ? `flex: 0 0 45%; aspect-ratio: 1/1; margin: 0 auto;` : `flex: 0.6; min-height: 0;`);
 
       const mainLayout = isLandscape ? 'row' : 'column';
 
@@ -248,9 +248,9 @@ export const TEMPLATE_METADATA = [
     fields: [{ name: 'text', label: 'Cable ID / Text', type: 'text', default: 'CABLE-01' }],
     html: (p, isLandscape) => `
       <div class="label-canvas-container" style="position: relative; display: flex; flex-direction: ${isLandscape ? 'row' : 'column'}; padding: 0;">
-        <div style="position: absolute; z-index: 10; ${isLandscape ? 'top: 0; bottom: 0; left: 50%; border-left: 2px dashed black; transform: translateX(-50%);' : 'left: 0; right: 0; top: 50%; border-top: 2px dashed black; transform: translateY(-50%);'}"></div>
-        <div style="flex: 1; min-width: 0; min-height: 0; padding: 4%; display: flex;"><div class="bound-box"><div class="auto-text" style="font-weight: 900; white-space: nowrap;">${p.text || ''}</div></div></div>
-        <div style="flex: 1; min-width: 0; min-height: 0; padding: 4%; display: flex;"><div class="bound-box"><div class="auto-text" style="font-weight: 900; white-space: nowrap;">${p.text || ''}</div></div></div>
+        <div style="position: absolute; z-index: 10; ${isLandscape ? 'top: 0; bottom: 0; left: 50%; border-left: 3px dashed black; transform: translateX(-50%);' : 'left: 0; right: 0; top: 50%; border-top: 3px dashed black; transform: translateY(-50%);'}"></div>
+        <div style="flex: 1; min-width: 0; min-height: 0; padding: 6%; display: flex; align-items: center; justify-content: center;"><div class="bound-box"><div class="auto-text" style="font-weight: 900; text-align: center;">${p.text || ''}</div></div></div>
+        <div style="flex: 1; min-width: 0; min-height: 0; padding: 6%; display: flex; align-items: center; justify-content: center;"><div class="bound-box"><div class="auto-text" style="font-weight: 900; text-align: center;">${p.text || ''}</div></div></div>
       </div>`,
   },
   {
@@ -345,7 +345,7 @@ export const TEMPLATE_METADATA = [
                 <div class="auto-text" style="font-weight: 700; text-align: left; white-space: nowrap;">${p.product_name || ''}</div>
               </div>
               <div class="bound-box" style="flex: 0.6; align-items: flex-start; justify-content: flex-start;">
-                <div class="auto-text" style="font-weight: 900; text-decoration: line-through; text-align: left; white-space: nowrap;">${p.currency || ''}${p.old_price || ''}</div>
+                <div class="auto-text" style="font-weight: 900; text-decoration: line-through; text-decoration-thickness: 3px; text-align: left; white-space: nowrap;">${p.currency || ''}${p.old_price || ''}</div>
               </div>
             </div>
             <div style="flex: 1.2; background: black; color: white; display: flex; align-items: center; justify-content: center; padding: 4%;">
@@ -361,7 +361,7 @@ export const TEMPLATE_METADATA = [
               <div class="auto-text" style="font-weight: 700; white-space: nowrap;">${p.product_name || ''}</div>
             </div>
             <div class="bound-box" style="flex: 0.6;">
-              <div class="auto-text" style="font-weight: 900; text-decoration: line-through; white-space: nowrap;">${p.currency || ''}${p.old_price || ''}</div>
+              <div class="auto-text" style="font-weight: 900; text-decoration: line-through; text-decoration-thickness: 3px; white-space: nowrap;">${p.currency || ''}${p.old_price || ''}</div>
             </div>
           </div>
           <div style="flex: 1.2; background: black; color: white; display: flex; align-items: center; justify-content: center; padding: 4%;">
@@ -379,18 +379,35 @@ export const TEMPLATE_METADATA = [
       { name: 'department', label: 'Department', type: 'text', default: 'IT DEPT' },
       { name: 'asset_id', label: 'Asset ID', type: 'text', default: 'AST-0001' },
       { name: 'description', label: 'Description', type: 'text', default: 'Laptop Computer' },
+      {
+        name: 'code_type',
+        label: 'Code Type',
+        type: 'select',
+        options: [
+          { label: 'QR Code', value: 'qrcode' },
+          { label: 'Barcode', value: 'barcode' },
+          { label: 'None', value: 'none' },
+        ],
+        default: 'qrcode',
+      },
     ],
     html: (p, isLandscape) => {
-      const codeHtml = p.asset_id ? `<div class="catlabel-code" data-type="qrcode" data-value="${p.asset_id}"></div>` : '';
+      const hasCode = p.code_type !== 'none';
+      const isQR = p.code_type === 'qrcode';
+      const codeHtml = hasCode ? `<div class="catlabel-code" data-type="${isQR ? 'qrcode' : 'barcode'}" data-format="code128" data-value="${p.asset_id}"></div>` : '';
+
+      const codeContainerStyle = isLandscape
+        ? (isQR ? `flex: 0 0 35%; aspect-ratio: 1/1; margin: auto 0;` : `flex: 0.6; min-width: 0;`)
+        : (isQR ? `flex: 0 0 45%; aspect-ratio: 1/1; margin: 0 auto;` : `flex: 0.6; min-height: 0;`);
 
       if (isLandscape && codeHtml) {
         return `
           <div class="label-canvas-container" style="display: flex; flex-direction: column; padding: 4%; gap: 6%;">
-            <div class="bound-box" style="flex: 1.4; background: black; color: white; border-radius: 2px;">
+            <div class="bound-box" style="flex: 1; background: black; color: white; border-radius: 2px;">
               <div class="auto-text" style="font-weight: 900; letter-spacing: 2px; white-space: nowrap;">${p.department || ''}</div>
             </div>
-            <div style="flex: 4.6; min-width: 0; min-height: 0; display: flex; gap: 6%;">
-              <div style="flex: 0 0 auto; height: 100%; aspect-ratio: 1/1;">${codeHtml}</div>
+            <div style="flex: 3; min-width: 0; min-height: 0; display: flex; gap: 6%;">
+              ${hasCode ? `<div style="${codeContainerStyle}">${codeHtml}</div>` : ''}
               <div style="flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 4%;">
                 <div class="bound-box" style="flex: 2; justify-content: flex-start;"><div class="auto-text" style="font-weight: 900; text-align: left; white-space: nowrap; font-family: monospace;">${p.asset_id || ''}</div></div>
                 <div class="bound-box" style="flex: 1.5; justify-content: flex-start;"><div class="auto-text" style="font-weight: 500; font-style: italic; text-align: left;">${p.description || ''}</div></div>
@@ -401,12 +418,12 @@ export const TEMPLATE_METADATA = [
 
       return `
         <div class="label-canvas-container" style="display: flex; flex-direction: column; padding: 4%; gap: 6%;">
-          <div class="bound-box" style="flex: 1.2; background: black; color: white; border-radius: 2px;">
+          <div class="bound-box" style="flex: 1; background: black; color: white; border-radius: 2px;">
             <div class="auto-text" style="font-weight: 900; letter-spacing: 2px; white-space: nowrap;">${p.department || ''}</div>
           </div>
-          ${codeHtml ? `<div style="flex: 0 0 auto; width: 100%; aspect-ratio: 1/1;">${codeHtml}</div>` : ''}
-          <div class="bound-box" style="flex: 2;"><div class="auto-text" style="font-weight: 900; white-space: nowrap; font-family: monospace;">${p.asset_id || ''}</div></div>
-          <div class="bound-box" style="flex: 1.5;"><div class="auto-text" style="font-weight: 500; font-style: italic;">${p.description || ''}</div></div>
+          ${hasCode ? `<div style="${codeContainerStyle}">${codeHtml}</div>` : ''}
+          <div class="bound-box" style="flex: 1.5;"><div class="auto-text" style="font-weight: 900; white-space: nowrap; font-family: monospace;">${p.asset_id || ''}</div></div>
+          <div class="bound-box" style="flex: 1;"><div class="auto-text" style="font-weight: 500; font-style: italic;">${p.description || ''}</div></div>
         </div>`;
     },
   },
@@ -442,14 +459,14 @@ export const TEMPLATE_METADATA = [
     description: 'Prominent expiration date.',
     fields: [
       { name: 'product_name', label: 'Product Name (Optional)', type: 'text', default: '' },
-      { name: 'exp_date', label: 'Expiration Date', type: 'text', default: '2025-12-31' },
-      { name: 'made_date', label: 'Mfg / Made On (Optional)', type: 'text', default: '' },
+      { name: 'exp_date', label: 'Expiration Date', type: 'date', default: '2025-12-31' },
+      { name: 'made_date', label: 'Mfg / Made On (Optional)', type: 'date', default: '' },
     ],
     html: (p) => {
-      let html = `<div class="label-canvas-container" style="display: flex; flex-direction: column; padding: 4%; gap: 4%;">`;
-      if (p.product_name) html += `<div class="bound-box" style="flex: 2;"><div class="auto-text" style="font-weight: 800; text-transform: uppercase;">${p.product_name}</div></div>`;
+      let html = `<div class="label-canvas-container" style="display: flex; flex-direction: column; padding: 6%; gap: 4%;">`;
+      if (p.product_name) html += `<div class="bound-box" style="flex: 1.5;"><div class="auto-text" style="font-weight: 800; text-transform: uppercase;">${p.product_name}</div></div>`;
       if (p.made_date) html += `<div class="bound-box" style="flex: 1;"><div class="auto-text" style="font-weight: 600; white-space: nowrap;">MFG: ${p.made_date}</div></div>`;
-      html += `<div class="bound-box" style="flex: 3; background: black; color: white; padding: 2%; border-radius: 4px;"><div class="auto-text" style="font-weight: 900; white-space: nowrap; letter-spacing: 1px;">EXP: ${p.exp_date || ''}</div></div></div>`;
+      html += `<div class="bound-box" style="flex: 2.5; background: black; color: white; padding: 2%; border-radius: 4px;"><div class="auto-text" style="font-weight: 900; white-space: nowrap; letter-spacing: 1px;">EXP: ${p.exp_date || ''}</div></div></div>`;
       return html;
     },
   },
@@ -504,10 +521,10 @@ const LEGACY_FIELD_NAMES = [
 ];
 
 const getTemplateMetadata = (templateId) =>
-  TEMPLATE_METADATA.find((template) => template.id === templateId) || TEMPLATE_METADATA[0];
+  TEMPLATE_METADATA.find((template) => template.id === templateId) || TEMPLATE_METADATA.find(t => t.id === 'title_subtitle');
 
 const resolveTemplateParams = (item = {}, record = {}) => {
-  const templateId = item.template_id || 'centered_text';
+  const templateId = item.template_id || 'title_subtitle';
   const templateMetadata = getTemplateMetadata(templateId);
   const sourceParams = item.params && typeof item.params === 'object' ? item.params : {};
   const mergedParams = {};
@@ -534,7 +551,7 @@ const resolveTemplateParams = (item = {}, record = {}) => {
 };
 
 export const buildLabelTemplateMarkup = (item = {}, record = {}) => {
-  const templateId = item.template_id || 'centered_text';
+  const templateId = item.template_id || 'title_subtitle';
   const p = resolveTemplateParams(item, record);
   const isLandscape = Number(item.width || 384) > Number(item.height || 384);
   const templateMetadata = getTemplateMetadata(templateId);

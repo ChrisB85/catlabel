@@ -45,7 +45,7 @@ const normalizeCanvasState = (canvasState = {}) => {
 
   const legacyTemplateItem = items.length === 1 && items[0]?.type === 'label_template' ? items[0] : null;
   if (legacyTemplateItem) {
-    const templateId = legacyTemplateItem.template_id || 'centered_text';
+    const templateId = legacyTemplateItem.template_id || 'title_subtitle';
     const params = legacyTemplateItem.params || {};
     return {
       ...canvasState,
