@@ -352,12 +352,6 @@ export default function CanvasArea() {
                       {/* KONVA OVERLAY LAYER */}
                       <div style={{ position: 'absolute', inset: 0, zIndex: 2 }}>
                       <Stage
-                        ref={(node) => {
-                          const shouldCapture = isHtmlMode ? isActive : (isActive && rIdx === 0);
-                          if (node && shouldCapture) {
-                            localStageRef.current = node;
-                          }
-                        }}
                         draggable={isPanning}
                         x={stagePos.x}
                         y={stagePos.y}
