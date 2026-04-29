@@ -5,7 +5,7 @@ import time
 import webbrowser
 
 def open_browser(port):
-    time.sleep(1.5)
+    time.sleep(5)
     webbrowser.open(f"http://localhost:{port}")
 
 if __name__ == "__main__":
