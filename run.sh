@@ -19,24 +19,17 @@ hash_file() {
 }
 
 REQUIREMENTS_HASH_FILE="data/.requirements.sha256"
-FRONTEND_HASH_FILE="data/.frontend-package.sha256"
 current_requirements_hash="$(hash_file requirements.txt)"
-current_frontend_hash="$(hash_file frontend/package.json)"
 saved_requirements_hash=""
-saved_frontend_hash=""
 
 if [ -f "$REQUIREMENTS_HASH_FILE" ]; then
     saved_requirements_hash="$(cat "$REQUIREMENTS_HASH_FILE")"
 fi
 
-if [ -f "$FRONTEND_HASH_FILE" ]; then
-    saved_frontend_hash="$(cat "$FRONTEND_HASH_FILE")"
-fi
-
 echo "=== CatLabel Bootstrapper ==="
 
 if [ ! -d "env" ]; then
-    echo "[1/4] Environment not found. Starting installation..."
+    echo "[1/3] Environment not found. Starting installation..."
     
     mkdir -p bin data
     if [ ! -f "bin/micromamba" ]; then
@@ -55,10 +48,10 @@ if [ ! -d "env" ]; then
         chmod +x bin/micromamba
     fi
 
-    echo "[2/4] Creating isolated environment (Python 3.11, Node.js, python-lzo)..."
-    ./bin/micromamba create -p ./env -c conda-forge python=3.11 pip nodejs git python-lzo -y
+    echo "[2/3] Creating isolated environment (Python 3.11, python-lzo)..."
+    ./bin/micromamba create -p ./env -c conda-forge python=3.11 pip git python-lzo -y
 
-    echo "[3/4] Installing backend dependencies..."
+    echo "[3/3] Installing backend dependencies..."
     ./bin/micromamba run -p ./env python -m pip install -r requirements.txt
 
     echo ""
@@ -83,54 +76,27 @@ if [ ! -d "env" ]; then
     echo "----------------------------------------------------------------------"
     echo ""
 
-    # 3. Use pushd/popd for safe directory navigation
-    echo "[4/4] Building optimized frontend UI..."
-    pushd frontend > /dev/null
-    
-    ../bin/micromamba run -p ../env npm install
-    ../bin/micromamba run -p ../env npm run build
-    
-    popd > /dev/null
-
     printf '%s' "$current_requirements_hash" > "$REQUIREMENTS_HASH_FILE"
-    printf '%s' "$current_frontend_hash" > "$FRONTEND_HASH_FILE"
 
     echo "Installation complete!"
     echo "-----------------------------------"
 else
     needs_backend_refresh=0
-    needs_frontend_refresh=0
 
     if [ -f ".update_needed" ]; then
-        echo "[*] Update detected. Refreshing dependencies and rebuilding UI..."
+        echo "[*] Update detected. Refreshing dependencies..."
         needs_backend_refresh=1
-        needs_frontend_refresh=1
     else
         if [ "$current_requirements_hash" != "$saved_requirements_hash" ]; then
             echo "[*] Detected requirements.txt changes. Refreshing backend dependencies..."
             needs_backend_refresh=1
-        fi
-
-        if [ "$current_frontend_hash" != "$saved_frontend_hash" ]; then
-            echo "[*] Detected frontend/package.json changes. Refreshing frontend dependencies..."
-            needs_frontend_refresh=1
         fi
     fi
 
     if [ "$needs_backend_refresh" -eq 1 ]; then
         ./bin/micromamba run -p ./env python -m pip install -r requirements.txt
         printf '%s' "$current_requirements_hash" > "$REQUIREMENTS_HASH_FILE"
-    fi
-
-    if [ "$needs_frontend_refresh" -eq 1 ]; then
-        pushd frontend > /dev/null
-        ../bin/micromamba run -p ../env npm install
-        ../bin/micromamba run -p ../env npm run build
-        popd > /dev/null
-        printf '%s' "$current_frontend_hash" > "$FRONTEND_HASH_FILE"
-    fi
-
-    if [ "$needs_backend_refresh" -eq 0 ] && [ "$needs_frontend_refresh" -eq 0 ]; then
+    else
         echo "[*] Fast booting. Dependencies are up to date."
     fi
 

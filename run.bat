@@ -7,26 +7,18 @@ set "MAMBA_ROOT_PREFIX=%cd%\data\mamba_root"
 if not exist "data" mkdir data
 
 set "REQ_HASH_FILE=data\.requirements.sha256"
-set "FRONTEND_HASH_FILE=data\.frontend-package.sha256"
 
 set "CURRENT_REQ_HASH="
 for /f %%i in ('powershell -NoProfile -Command "(Get-FileHash -Path ''requirements.txt'' -Algorithm SHA256).Hash.ToLower()"') do set "CURRENT_REQ_HASH=%%i"
 if errorlevel 1 goto error
 
-set "CURRENT_FRONTEND_HASH="
-for /f %%i in ('powershell -NoProfile -Command "(Get-FileHash -Path ''frontend\package.json'' -Algorithm SHA256).Hash.ToLower()"') do set "CURRENT_FRONTEND_HASH=%%i"
-if errorlevel 1 goto error
-
 set "SAVED_REQ_HASH="
 if exist "%REQ_HASH_FILE%" set /p SAVED_REQ_HASH=<"%REQ_HASH_FILE%"
-
-set "SAVED_FRONTEND_HASH="
-if exist "%FRONTEND_HASH_FILE%" set /p SAVED_FRONTEND_HASH=<"%FRONTEND_HASH_FILE%"
 
 echo === CatLabel Bootstrapper ===
 
 if not exist "env\" (
-    echo [1/4] Environment not found. Starting installation...
+    echo [1/3] Environment not found. Starting installation...
 
     if not exist "bin\micromamba.exe" (
         echo       Downloading standalone Micromamba...
@@ -50,11 +42,11 @@ if not exist "env\" (
         goto error
     )
 
-    echo [2/4] Creating isolated environment ^(Python ^& Node.js^)...
-    bin\micromamba.exe create -p .\env -c conda-forge python=3.11 pip nodejs -y
+    echo [2/3] Creating isolated environment ^(Python^)...
+    bin\micromamba.exe create -p .\env -c conda-forge python=3.11 pip -y
     if errorlevel 1 goto error
 
-    echo [3/4] Installing backend dependencies...
+    echo [3/3] Installing backend dependencies...
     bin\micromamba.exe run -p .\env python -m pip install -r requirements.txt
     if errorlevel 1 goto error
 
@@ -81,45 +73,20 @@ if not exist "env\" (
     echo ----------------------------------------------------------------------
     echo.
 
-    echo [4/4] Building optimized frontend UI...
-    pushd frontend
-    
-    REM npm.cmd is required for Windows batch execution
-    ..\bin\micromamba.exe run -p ..\env npm.cmd install
-    if errorlevel 1 (
-        popd
-        goto error
-    )
-    
-    ..\bin\micromamba.exe run -p ..\env npm.cmd run build
-    if errorlevel 1 (
-        popd
-        goto error
-    )
-    
-    popd
-
     > "%REQ_HASH_FILE%" echo %CURRENT_REQ_HASH%
-    > "%FRONTEND_HASH_FILE%" echo %CURRENT_FRONTEND_HASH%
 
     echo Installation complete!
     echo -----------------------------------
 ) else (
     set "NEEDS_BACKEND_REFRESH=0"
-    set "NEEDS_FRONTEND_REFRESH=0"
 
     if exist ".update_needed" (
-        echo [*] Update detected. Refreshing dependencies and rebuilding UI...
+        echo [*] Update detected. Refreshing dependencies...
         set "NEEDS_BACKEND_REFRESH=1"
-        set "NEEDS_FRONTEND_REFRESH=1"
     ) else (
         if /I not "%CURRENT_REQ_HASH%"=="%SAVED_REQ_HASH%" (
             echo [*] Detected requirements.txt changes. Refreshing backend dependencies...
             set "NEEDS_BACKEND_REFRESH=1"
-        )
-        if /I not "%CURRENT_FRONTEND_HASH%"=="%SAVED_FRONTEND_HASH%" (
-            echo [*] Detected frontend\package.json changes. Refreshing frontend dependencies...
-            set "NEEDS_FRONTEND_REFRESH=1"
         )
     )
 
@@ -127,25 +94,7 @@ if not exist "env\" (
         bin\micromamba.exe run -p .\env python -m pip install -r requirements.txt
         if errorlevel 1 goto error
         > "%REQ_HASH_FILE%" echo %CURRENT_REQ_HASH%
-    )
-
-    if "%NEEDS_FRONTEND_REFRESH%"=="1" (
-        pushd frontend
-        ..\bin\micromamba.exe run -p ..\env npm.cmd install
-        if errorlevel 1 (
-            popd
-            goto error
-        )
-        ..\bin\micromamba.exe run -p ..\env npm.cmd run build
-        if errorlevel 1 (
-            popd
-            goto error
-        )
-        popd
-        > "%FRONTEND_HASH_FILE%" echo %CURRENT_FRONTEND_HASH%
-    )
-
-    if "%NEEDS_BACKEND_REFRESH%"=="0" if "%NEEDS_FRONTEND_REFRESH%"=="0" (
+    ) else (
         echo [*] Fast booting. Dependencies are up to date.
     )
 
