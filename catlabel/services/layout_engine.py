@@ -63,7 +63,7 @@ TEMPLATE_METADATA = [
     {
         "id": "inventory_tag",
         "category": "Dedicated",
-        "name": "Modern Inventory Tag",
+        "name": "Inventory Tag",
         "description": "Professional asset tag with inverted department header and QR/Barcode.",
         "fields": [
             {"name": "department", "label": "Department / Category", "type": "text", "default": "WAREHOUSE"},
@@ -163,13 +163,6 @@ TEMPLATE_METADATA = [
             {"name": "exp_date", "label": "Expiration Date", "type": "text", "default": "2025-12-31"},
             {"name": "made_date", "label": "Mfg / Made On (Optional)", "type": "text", "default": ""},
         ],
-    },
-    {
-        "id": "custom",
-        "category": "Layout",
-        "name": "Custom HTML",
-        "description": "Raw HTML entry.",
-        "fields": [{"name": "custom_html", "label": "HTML Content", "type": "textarea", "default": "<div>Hello</div>"}],
     },
 ]
 

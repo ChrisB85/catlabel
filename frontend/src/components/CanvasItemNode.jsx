@@ -168,7 +168,9 @@ const URLImage = ({ src, width, height }) => {
     }
   }, [image, dither, width, height]);
 
-  if (!image) return null;
+  if (!image) {
+    return <Rect width={width} height={height} fill="transparent" />;
+  }
 
   return (
     <KonvaImage 

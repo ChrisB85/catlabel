@@ -124,14 +124,14 @@ export const TEMPLATE_METADATA = [
       if (isLandscape) {
         return `
           <div class="label-canvas-container" style="display: flex; flex-direction: row; padding: 4px; gap: 8px;">
-            <div style="flex: 0 0 auto; height: 100%; aspect-ratio: 1/1;">${qrHtml}</div>
-            <div class="bound-box" style="flex: 1;"><div class="auto-text" style="font-weight: 900;">${p.text || ''}</div></div>
+            <div style="flex: 0 1 40%; max-width: 40%; aspect-ratio: 1/1; margin: auto 0;">${qrHtml}</div>
+            <div class="bound-box" style="flex: 1;"><div class="auto-text" style="font-weight: 900; text-align: left;">${p.text || ''}</div></div>
           </div>`;
       }
 
       return `
-        <div class="label-canvas-container" style="display: flex; flex-direction: column; padding: 4px; gap: 8px;">
-          <div style="flex: 0 0 auto; width: 100%; aspect-ratio: 1/1;">${qrHtml}</div>
+        <div class="label-canvas-container" style="display: flex; flex-direction: column; padding: 4px; gap: 4px;">
+          <div style="flex: 0 1 50%; max-height: 50%; aspect-ratio: 1/1; margin: 0 auto;">${qrHtml}</div>
           <div class="bound-box" style="flex: 1;"><div class="auto-text" style="font-weight: 900;">${p.text || ''}</div></div>
         </div>`;
     },
@@ -174,7 +174,7 @@ export const TEMPLATE_METADATA = [
   {
     id: 'inventory_tag',
     category: 'Dedicated',
-    name: 'Modern Inventory Tag',
+    name: 'Inventory Tag',
     description: 'Professional asset tag with inverted department header and QR/Barcode.',
     fields: [
       { name: 'department', label: 'Department / Category', type: 'text', default: 'WAREHOUSE' },
@@ -197,16 +197,16 @@ export const TEMPLATE_METADATA = [
       const codeHtml = p.code_data ? `<div class="catlabel-code" data-type="${isQR ? 'qrcode' : 'barcode'}" data-format="code128" data-value="${p.code_data}"></div>` : '';
       
       const codeContainerStyle = isLandscape
-        ? (isQR ? `flex: 0 0 auto; height: 100%; aspect-ratio: 1/1;` : `flex: 0 0 35%;`)
-        : (isQR ? `flex: 0 0 auto; width: 100%; aspect-ratio: 1/1;` : `flex: 0 0 25%;`);
+        ? (isQR ? `flex: 0 1 40%; max-width: 40%; aspect-ratio: 1/1;` : `flex: 0.8;`)
+        : (isQR ? `flex: 0 1 45%; max-height: 45%; aspect-ratio: 1/1; margin: 0 auto;` : `flex: 0.8;`);
 
       const mainLayout = isLandscape ? 'row' : 'column';
 
       return `
-        <div class="label-canvas-container" style="display: flex; flex-direction: ${mainLayout}; padding: 4px; gap: 6px;">
+        <div class="label-canvas-container" style="display: flex; flex-direction: ${mainLayout}; padding: 2px; gap: 4px;">
           ${codeHtml && isLandscape ? `<div style="${codeContainerStyle}">${codeHtml}</div>` : ''}
-          <div style="flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 4px;">
-            <div class="bound-box" style="flex: 0 0 25%; background: black; color: white; border-radius: 2px;">
+          <div style="flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 2px;">
+            <div class="bound-box" style="flex: 1; background: black; color: white; border-radius: 2px;">
               <div class="auto-text" style="font-weight: 900; letter-spacing: 1px; white-space: nowrap;">${p.department || ''}</div>
             </div>
             ${codeHtml && !isLandscape ? `<div style="${codeContainerStyle}">${codeHtml}</div>` : ''}
@@ -411,14 +411,6 @@ export const TEMPLATE_METADATA = [
       html += `<div class="bound-box" style="flex: 3; border: 3px solid black; padding: 4px; border-radius: 4px;"><div class="auto-text" style="font-weight: 900; white-space: nowrap;">EXP: ${p.exp_date || ''}</div></div></div>`;
       return html;
     },
-  },
-  {
-    id: 'custom',
-    category: 'Layout',
-    name: 'Custom HTML',
-    description: 'Raw HTML entry.',
-    fields: [{ name: 'custom_html', label: 'HTML Content', type: 'textarea', default: '<div class="bound-box"><div class="auto-text">Hello</div></div>' }],
-    html: (p) => `<div class="label-canvas-container">${p.custom_html || ''}</div>`,
   },
 ];
 
