@@ -95,8 +95,8 @@ export const TEMPLATE_METADATA = [
       const iconSrc = p.icon_src || DEFAULT_ICON_SRC;
 
       return `
-        <div class="label-canvas-container" style="display: flex; flex-direction: ${isRow ? 'row' : 'column'}; padding: 4px; gap: 6px; align-items: center; justify-content: center;">
-          <div style="flex: 0 0 auto; aspect-ratio: 1/1; ${isRow ? 'height: 100%;' : 'width: 100%;'} display: flex; align-items: center; justify-content: center; padding: 2px;">
+        <div class="label-canvas-container" style="display: flex; flex-direction: ${isRow ? 'row' : 'column'}; padding: 4px; gap: ${isRow ? '8px' : '4px'}; align-items: center; justify-content: center;">
+          <div style="flex: 0 1 ${isRow ? '35%; max-width: 35%;' : '50%; max-height: 50%;'} aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center;">
             <img src="${iconSrc}" style="width: 100%; height: 100%; object-fit: contain;" />
           </div>
           <div class="bound-box" style="flex: 1; align-items: ${isRow ? 'flex-start' : 'center'}; justify-content: center;">
