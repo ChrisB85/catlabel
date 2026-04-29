@@ -7,6 +7,8 @@ CatLabel is a local web application for designing and printing labels to portabl
 
 It is a fork of [TiMini Print](https://github.com/Dejniel/TiMini-Print). CatLabel moves the original CLI and Tkinter-based logic into a web interface built with FastAPI and React, while adding native support for Niimbot the protocol.
 
+https://github.com/user-attachments/assets/d7103905-7133-41c0-b20b-ee69727d9418
+
 ---
 
 ## Supported Printers
