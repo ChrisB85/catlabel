@@ -10,6 +10,9 @@ It is a fork of [TiMini Print](https://github.com/Dejniel/TiMini-Print). CatLabe
 https://github.com/user-attachments/assets/d7103905-7133-41c0-b20b-ee69727d9418
 
 ---
+<img width="1000" height="1115" alt="catlabel_print" src="https://github.com/user-attachments/assets/20a525d0-b6b4-4e8e-a743-ebb3ff5333ea" />
+
+---
 
 ## Supported Printers
 
