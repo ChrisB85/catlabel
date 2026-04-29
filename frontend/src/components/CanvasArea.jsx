@@ -240,7 +240,7 @@ export default function CanvasArea() {
       <div className="flex flex-col gap-10 min-h-max min-w-max pb-16">
         {visibleRecords.map((record, rIdx) => (
           <div key={rIdx} className="flex flex-col items-center gap-4">
-            {batchRecords.length > 1 && !isHtmlMode && (
+            {batchRecords.length > 1 && (
               <div className="text-[10px] uppercase tracking-widest font-bold text-neutral-400">
                 Record {rIdx + 1} {rIdx === 9 && batchRecords.length > 10 ? `(Showing 10 of ${batchRecords.length} records)` : ''}
               </div>
