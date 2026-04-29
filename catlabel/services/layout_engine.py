@@ -1,5 +1,28 @@
 TEMPLATE_METADATA = [
     {
+        "id": "spice_jar",
+        "category": "Dedicated",
+        "name": "Pantry / Spice Jar",
+        "description": "Elegant typography for home organization. Highly adaptable.",
+        "fields": [
+            {
+                "name": "style",
+                "label": "Design Style",
+                "type": "select",
+                "options": [
+                    {"label": "Apothecary (Classic)", "value": "jar_apothecary"},
+                    {"label": "Farmhouse (Stripes & Clean)", "value": "jar_farmhouse"},
+                ],
+                "default": "jar_apothecary",
+            },
+            {"name": "show_header", "label": "Include Top Header", "type": "boolean", "default": True},
+            {"name": "header_text", "label": "Top Header Text", "type": "text", "default": "PREMIUM"},
+            {"name": "title", "label": "Main Label", "type": "text", "default": "BASIL"},
+            {"name": "show_subtitle", "label": "Include Subtitle", "type": "boolean", "default": True},
+            {"name": "subtitle_text", "label": "Subtitle / Details", "type": "text", "default": "Sweet & Aromatic"},
+        ],
+    },
+    {
         "id": "title_subtitle",
         "category": "Layout",
         "name": "Title & Subtitle",
@@ -145,27 +168,6 @@ TEMPLATE_METADATA = [
                 ],
                 "default": "qrcode",
             },
-        ],
-    },
-    {
-        "id": "spice_jar",
-        "category": "Dedicated",
-        "name": "Pantry / Spice Jar",
-        "description": "Elegant typography for home organization.",
-        "fields": [
-            {
-                "name": "style",
-                "label": "Design Style",
-                "type": "select",
-                "options": [
-                    {"label": "Apothecary (Classic)", "value": "jar_apothecary"},
-                    {"label": "Farmhouse (Stripes & Clean)", "value": "jar_farmhouse"},
-                ],
-                "default": "jar_apothecary",
-            },
-            {"name": "title", "label": "Main Label", "type": "text", "default": "BASIL"},
-            {"name": "subtitle", "label": "Subtitle / Details", "type": "text", "default": "Sweet & Aromatic"},
-            {"name": "text", "label": "Top Text (e.g. Premium)", "type": "text", "default": "PREMIUM"},
         ],
     },
     {

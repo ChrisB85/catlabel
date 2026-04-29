@@ -2,44 +2,88 @@ import { applyVars } from '../utils/rendering';
 
 const DEFAULT_ICON_SRC = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5Z29uIHBvaW50cz0iMTIgMiAxNS4wOSA4LjI2IDIyIDkuMjcgMTcgMTQuMTQgMTguMTggMjEuMDIgMTIgMTcuNzcgNS44MiAyMS4wMiA3IDE0LjE0IDIgOS4yNyA4LjkxIDguMjYgMTIgMiI+PC9wb2x5Z29uPjwvc3ZnPg==';
 
-const buildJarApothecaryMarkup = ({ text = '', title = '', subtitle = '' }) => `
+const buildJarApothecaryMarkup = (p) => {
+  const showHeader = p.show_header === true;
+  const showSubtitle = p.show_subtitle === true;
+
+  return `
   <div class="label-canvas-container" style="padding: 4%;">
     <div style="border: 3px solid black; height: 100%; width: 100%; outline: 1px solid black; outline-offset: -5px; display: flex; flex-direction: column; padding: 6%; text-align: center; gap: 2%;">
+      ${showHeader ? `
       <div class="bound-box" style="flex: 0.5;">
-        <div class="auto-text" style="letter-spacing: 2px; font-weight: 700; white-space: nowrap;">${text || 'PREMIUM'}</div>
-      </div>
+        <div class="auto-text" style="letter-spacing: 2px; font-weight: 700; white-space: nowrap;">${p.header_text || ''}</div>
+      </div>` : ''}
       <div class="bound-box" style="flex: 2;">
-        <div class="auto-text" style="font-weight: 900; text-transform: uppercase; font-family: serif; white-space: nowrap;">${title || ''}</div>
+        <div class="auto-text" style="font-weight: 900; text-transform: uppercase; font-family: serif; white-space: nowrap;">${p.title || ''}</div>
       </div>
+      ${showSubtitle ? `
       <div style="display: flex; align-items: center; justify-content: center; gap: 4px; flex: 0.2; min-height: 0;">
         <div style="height: 1px; background: black; width: 25%;"></div>
         <div class="bound-box" style="flex: 0 0 10%;"><div class="auto-text">✧</div></div>
         <div style="height: 1px; background: black; width: 25%;"></div>
       </div>
       <div class="bound-box" style="flex: 0.8;">
-        <div class="auto-text" style="font-style: italic; font-weight: bold; font-family: serif;">${subtitle || ''}</div>
-      </div>
+        <div class="auto-text" style="font-style: italic; font-weight: bold; font-family: serif;">${p.subtitle_text || ''}</div>
+      </div>` : ''}
     </div>
   </div>
-`;
+  `;
+};
 
-const buildJarFarmhouseMarkup = ({ title = '', subtitle = '' }) => `
+const buildJarFarmhouseMarkup = (p) => {
+  const showHeader = p.show_header === true;
+  const showSubtitle = p.show_subtitle === true;
+
+  return `
   <div class="label-canvas-container" style="display: flex; flex-direction: column; border: 4px solid black; padding: 0;">
     <div style="height: 15%; background: repeating-linear-gradient(45deg, transparent, transparent 3px, black 3px, black 6px); border-bottom: 2px solid black;"></div>
     <div style="flex: 1; display: flex; flex-direction: column; align-items: center; padding: 4%; text-align: center; gap: 2%; min-width: 0; min-height: 0;">
+      ${showHeader ? `
+      <div class="bound-box" style="flex: 0.5; width: 100%;">
+        <div class="auto-text" style="letter-spacing: 2px; font-weight: 700; white-space: nowrap;">${p.header_text || ''}</div>
+      </div>` : ''}
       <div class="bound-box" style="flex: 2; width: 100%;">
-        <div class="auto-text" style="font-weight: 900; text-transform: uppercase; font-style: italic; font-family: serif; white-space: nowrap;">${title || ''}</div>
+        <div class="auto-text" style="font-weight: 900; text-transform: uppercase; font-style: italic; font-family: serif; white-space: nowrap;">${p.title || ''}</div>
       </div>
+      ${showSubtitle ? `
       <div style="width: 80%; height: 2px; background: black; flex-shrink: 0;"></div>
       <div class="bound-box" style="flex: 1; width: 100%;">
-        <div class="auto-text" style="font-weight: bold; letter-spacing: 2px; text-transform: uppercase; white-space: nowrap;">${subtitle || ''}</div>
-      </div>
+        <div class="auto-text" style="font-weight: bold; letter-spacing: 2px; text-transform: uppercase; white-space: nowrap;">${p.subtitle_text || ''}</div>
+      </div>` : ''}
     </div>
     <div style="height: 15%; background: repeating-linear-gradient(45deg, transparent, transparent 3px, black 3px, black 6px); border-top: 2px solid black;"></div>
   </div>
-`;
+  `;
+};
 
 export const TEMPLATE_METADATA = [
+  {
+    id: 'spice_jar',
+    category: 'Dedicated',
+    name: 'Pantry / Spice Jar',
+    description: 'Elegant typography for home organization. Highly adaptable.',
+    fields: [
+      {
+        name: 'style',
+        label: 'Design Style',
+        type: 'select',
+        options: [
+          { label: 'Apothecary (Classic)', value: 'jar_apothecary' },
+          { label: 'Farmhouse (Stripes & Clean)', value: 'jar_farmhouse' },
+        ],
+        default: 'jar_apothecary',
+      },
+      { name: 'show_header', label: 'Include Top Header', type: 'boolean', default: true },
+      { name: 'header_text', label: 'Top Header Text', type: 'text', default: 'PREMIUM' },
+      { name: 'title', label: 'Main Label', type: 'text', default: 'BASIL' },
+      { name: 'show_subtitle', label: 'Include Subtitle', type: 'boolean', default: true },
+      { name: 'subtitle_text', label: 'Subtitle / Details', type: 'text', default: 'Sweet & Aromatic' },
+    ],
+    html: (p) => {
+      const isFarmhouse = p.style === 'jar_farmhouse';
+      return isFarmhouse ? buildJarFarmhouseMarkup(p) : buildJarApothecaryMarkup(p);
+    },
+  },
   {
     id: 'title_subtitle',
     category: 'Layout',
@@ -85,7 +129,7 @@ export const TEMPLATE_METADATA = [
 
       return `
         <div class="label-canvas-container" style="display: flex; flex-direction: ${isRow ? 'row' : 'column'}; padding: 4%; gap: ${isRow ? '6%' : '4%'}; align-items: center; justify-content: center;">
-          <div style="flex: 0 1 ${isRow ? '25%; max-width: 25%;' : '40%; max-height: 40%;'} aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center;">
+          <div style="flex: 0 1 auto; ${isRow ? 'height: 100%;' : 'width: 100%;'} aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center;">
             <img src="${iconSrc}" style="width: 100%; height: 100%; object-fit: contain;" />
           </div>
           <div class="bound-box" style="flex: 1; align-items: ${isRow ? 'flex-start' : 'center'}; justify-content: center;">
@@ -113,14 +157,14 @@ export const TEMPLATE_METADATA = [
       if (isLandscape) {
         return `
           <div class="label-canvas-container" style="display: flex; flex-direction: row; padding: 4%; gap: 6%;">
-            <div style="flex: 0 0 40%; aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; margin: auto 0;">${qrHtml}</div>
+            <div style="flex: 0 1 auto; height: 100%; aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; margin: auto 0;">${qrHtml}</div>
             <div class="bound-box" style="flex: 1;"><div class="auto-text" style="font-weight: 900; text-align: left;">${p.text || ''}</div></div>
           </div>`;
       }
 
       return `
         <div class="label-canvas-container" style="display: flex; flex-direction: column; padding: 6%; gap: 4%;">
-          <div style="flex: 0 1 45%; max-height: 45%; aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; margin: auto;">${qrHtml}</div>
+          <div style="flex: 0 1 auto; width: 100%; aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center;">${qrHtml}</div>
           <div class="bound-box" style="flex: 1;"><div class="auto-text" style="font-weight: 900;">${p.text || ''}</div></div>
         </div>`;
     },
@@ -170,7 +214,7 @@ export const TEMPLATE_METADATA = [
                 <div class="auto-text" style="font-weight: 800; text-transform: uppercase; white-space: nowrap;">${p.product_name || ''}</div>
               </div>
             </div>
-            ${hasCode ? `<div class="bound-box" style="${isQR ? 'flex: 0 0 35%; aspect-ratio: 1/1; margin: auto 0;' : 'flex: 0.6; min-width: 0;'}">${codeHtml}</div>` : ''}
+            ${hasCode ? `<div class="bound-box" style="${isQR ? 'flex: 0 1 auto; height: 100%; aspect-ratio: 1/1; margin: auto 0;' : 'flex: 0.6; min-width: 0;'}">${codeHtml}</div>` : ''}
           </div>`;
       }
 
@@ -187,7 +231,7 @@ export const TEMPLATE_METADATA = [
           <div class="bound-box" style="flex: 0.3; border-top: 2px solid black; padding-top: 2%;">
             <div class="auto-text" style="font-weight: 800; text-transform: uppercase; white-space: nowrap;">${p.product_name || ''}</div>
           </div>
-          ${hasCode ? `<div class="bound-box" style="${isQR ? 'flex: 0 0 45%; aspect-ratio: 1/1; margin: 0 auto;' : 'flex: 0.6; min-height: 0;'}">${codeHtml}</div>` : ''}
+          ${hasCode ? `<div class="bound-box" style="${isQR ? 'flex: 0 1 auto; width: 100%; aspect-ratio: 1/1; margin: 0 auto;' : 'flex: 0.6; min-height: 0;'}">${codeHtml}</div>` : ''}
         </div>`;
     },
   },
@@ -217,8 +261,8 @@ export const TEMPLATE_METADATA = [
       const codeHtml = p.code_data ? `<div class="catlabel-code" data-type="${isQR ? 'qrcode' : 'barcode'}" data-format="code128" data-value="${p.code_data}"></div>` : '';
       
       const codeContainerStyle = isLandscape
-        ? (isQR ? `flex: 0 0 40%; aspect-ratio: 1/1; margin: auto 0;` : `flex: 0.6; min-width: 0;`)
-        : (isQR ? `flex: 0 0 45%; aspect-ratio: 1/1; margin: 0 auto;` : `flex: 0.6; min-height: 0;`);
+        ? (isQR ? `flex: 0 1 auto; height: 100%; aspect-ratio: 1/1; margin: auto 0;` : `flex: 0.6; min-width: 0;`)
+        : (isQR ? `flex: 0 1 auto; width: 100%; aspect-ratio: 1/1; margin: 0 auto;` : `flex: 0.6; min-height: 0;`);
 
       const mainLayout = isLandscape ? 'row' : 'column';
 
@@ -397,8 +441,8 @@ export const TEMPLATE_METADATA = [
       const codeHtml = hasCode ? `<div class="catlabel-code" data-type="${isQR ? 'qrcode' : 'barcode'}" data-format="code128" data-value="${p.asset_id}"></div>` : '';
 
       const codeContainerStyle = isLandscape
-        ? (isQR ? `flex: 0 0 35%; aspect-ratio: 1/1; margin: auto 0;` : `flex: 0.6; min-width: 0;`)
-        : (isQR ? `flex: 0 0 45%; aspect-ratio: 1/1; margin: 0 auto;` : `flex: 0.6; min-height: 0;`);
+        ? (isQR ? `flex: 0 1 auto; height: 100%; aspect-ratio: 1/1; margin: auto 0;` : `flex: 0.6; min-width: 0;`)
+        : (isQR ? `flex: 0 1 auto; width: 100%; aspect-ratio: 1/1; margin: 0 auto;` : `flex: 0.6; min-height: 0;`);
 
       if (isLandscape && codeHtml) {
         return `
@@ -425,31 +469,6 @@ export const TEMPLATE_METADATA = [
           <div class="bound-box" style="flex: 1.5;"><div class="auto-text" style="font-weight: 900; white-space: nowrap; font-family: monospace;">${p.asset_id || ''}</div></div>
           <div class="bound-box" style="flex: 1;"><div class="auto-text" style="font-weight: 500; font-style: italic;">${p.description || ''}</div></div>
         </div>`;
-    },
-  },
-  {
-    id: 'spice_jar',
-    category: 'Dedicated',
-    name: 'Pantry / Spice Jar',
-    description: 'Elegant typography for home organization.',
-    fields: [
-      {
-        name: 'style',
-        label: 'Design Style',
-        type: 'select',
-        options: [
-          { label: 'Apothecary (Classic)', value: 'jar_apothecary' },
-          { label: 'Farmhouse (Stripes & Clean)', value: 'jar_farmhouse' },
-        ],
-        default: 'jar_apothecary',
-      },
-      { name: 'title', label: 'Main Label', type: 'text', default: 'BASIL' },
-      { name: 'subtitle', label: 'Subtitle / Details', type: 'text', default: 'Sweet & Aromatic' },
-      { name: 'text', label: 'Top Text (e.g. Premium)', type: 'text', default: 'PREMIUM' },
-    ],
-    html: (p) => {
-      const isFarmhouse = p.style === 'jar_farmhouse';
-      return isFarmhouse ? buildJarFarmhouseMarkup(p) : buildJarApothecaryMarkup(p);
     },
   },
   {
@@ -518,6 +537,10 @@ const LEGACY_FIELD_NAMES = [
   'style',
   'exp_date',
   'made_date',
+  'show_header',
+  'header_text',
+  'show_subtitle',
+  'subtitle_text'
 ];
 
 const getTemplateMetadata = (templateId) =>
@@ -541,6 +564,10 @@ const resolveTemplateParams = (item = {}, record = {}) => {
 
   const resolvedParams = {};
   Object.entries(mergedParams).forEach(([key, value]) => {
+    if (typeof value === 'boolean') {
+      resolvedParams[key] = value;
+      return;
+    }
     const resolvedValue = applyVars(value ?? '', record);
     resolvedParams[key] = key === 'custom_html'
       ? sanitizeLabelHtml(resolvedValue)

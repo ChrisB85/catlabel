@@ -22,9 +22,13 @@ export default function TemplateWizardModal({ template, onClose }) {
       if (field.type === 'select' && field.options?.length > 0) {
         defaultVal = field.default || (field.options[0].value || field.options[0]);
       }
-      initialData[field.name] = batchMode && (field.type === 'text' || field.type === 'textarea')
-        ? `{{ ${field.name} }}`
-        : defaultVal;
+      if (field.type === 'boolean') {
+        initialData[field.name] = defaultVal === true || defaultVal === 'true';
+      } else {
+        initialData[field.name] = batchMode && (field.type === 'text' || field.type === 'textarea')
+          ? `{{ ${field.name} }}`
+          : defaultVal;
+      }
     });
     setFormData(initialData);
   }, [template, batchMode]);
@@ -95,7 +99,8 @@ export default function TemplateWizardModal({ template, onClose }) {
 
           {(template.fields || []).map((field) => (
             <div key={field.name}>
-              <label className={labelClass}>{field.label}</label>
+              {field.type !== 'boolean' && <label className={labelClass}>{field.label}</label>}
+              
               {field.type === 'textarea' ? (
                 <textarea
                   value={formData[field.name] || ''}
@@ -135,6 +140,16 @@ export default function TemplateWizardModal({ template, onClose }) {
                     Choose Icon
                   </button>
                 </div>
+              ) : field.type === 'boolean' ? (
+                <label className="flex items-center gap-2 text-sm dark:text-neutral-200 cursor-pointer mb-3 bg-neutral-50 dark:bg-neutral-900/30 p-2 border border-neutral-200 dark:border-neutral-800 rounded transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800/50">
+                  <input
+                    type="checkbox"
+                    checked={!!formData[field.name]}
+                    onChange={(e) => setFormData({ ...formData, [field.name]: e.target.checked })}
+                    className="w-4 h-4 accent-blue-600"
+                  />
+                  {field.label}
+                </label>
               ) : (
                 <input
                   type={batchMode && field.type === 'date' ? 'text' : (field.type || 'text')}
