@@ -6,48 +6,51 @@ import {
   Download, Upload, Plus, Trash, Edit2, Save, Play
 } from 'lucide-react';
 
-// --- Modal for Moving Projects/Folders ---
-const MoveModal = ({ node, onClose }) => {
-  const { categories, updateProject, updateCategory } = useStore();
-  const [selectedDest, setSelectedDest] = useState("root");
+// --- Inline Edit Component ---
+const InlineEdit = ({ initialValue, onSave, onCancel }) => {
+  const [val, setVal] = useState(initialValue || '');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const inputRef = React.useRef(null);
 
-  const handleMove = () => {
-    const destId = selectedDest === "root" ? null : parseInt(selectedDest);
-    if (node.type === 'category') {
-      updateCategory(node.id, node.name, destId);
-    } else {
-      updateProject(node.id, null, destId);
+  React.useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
     }
-    onClose();
+  }, []);
+
+  const submit = (finalVal) => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    if (finalVal) onSave(finalVal);
+    else onCancel();
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      submit(val.trim());
+    } else if (e.key === 'Escape') {
+      submit('');
+    }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white dark:bg-neutral-900 w-full max-w-sm rounded shadow-xl flex flex-col border border-neutral-200 dark:border-neutral-800" onClick={e => e.stopPropagation()}>
-        <div className="p-4 border-b border-neutral-100 dark:border-neutral-800">
-          <h3 className="font-serif text-lg dark:text-white">Move "{node.name}"</h3>
-        </div>
-        <div className="p-4">
-          <label className="block text-[10px] font-bold text-neutral-400 uppercase tracking-widest mb-2">Destination Folder</label>
-          <select value={selectedDest} onChange={e => setSelectedDest(e.target.value)} className="w-full bg-neutral-50 dark:bg-neutral-950 border border-neutral-300 dark:border-neutral-700 p-2 text-sm dark:text-white focus:outline-none focus:border-blue-500">
-            <option value="root">/ (Root)</option>
-            {categories.map(c => {
-               if (node.type === 'category' && c.id === node.id) return null;
-               return <option key={c.id} value={c.id}>/ {c.name}</option>;
-            })}
-          </select>
-        </div>
-        <div className="p-4 flex gap-2 border-t border-neutral-100 dark:border-neutral-800">
-          <button onClick={onClose} className="flex-1 py-2 bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 text-xs font-bold uppercase hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors">Cancel</button>
-          <button onClick={handleMove} className="flex-1 py-2 bg-blue-600 text-white text-xs font-bold uppercase hover:bg-blue-700 transition-colors">Move Here</button>
-        </div>
-      </div>
-    </div>
+    <input
+      ref={inputRef}
+      value={val}
+      onChange={(e) => setVal(e.target.value)}
+      onKeyDown={handleKeyDown}
+      onBlur={() => submit(val.trim() && val !== initialValue ? val.trim() : '')}
+      className="flex-1 bg-white dark:bg-neutral-900 border border-blue-500 px-1 py-0.5 text-xs outline-none text-neutral-900 dark:text-white rounded-sm w-full"
+      onClick={e => e.stopPropagation()}
+      onDragStart={e => e.preventDefault()}
+    />
   );
 };
 
 // --- Recursive Tree Node Component ---
-const TreeNode = ({ node, level, onImport }) => {
+const TreeNode = ({ node, level, onImport, onMove }) => {
   const {
     currentProjectId, loadProject, updateProject, deleteProject,
     createCategory, updateCategory, deleteCategory, saveProject
@@ -56,7 +59,9 @@ const TreeNode = ({ node, level, onImport }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuCoords, setMenuCoords] = useState({ top: null, bottom: null, left: 0, maxHeight: 320 });
-  const [showMoveModal, setShowMoveModal] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [creating, setCreating] = useState(null); // { type: 'category'|'project' }
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const isFolder = node.type === 'category';
   const isLoaded = !isFolder && currentProjectId === node.id;
@@ -95,13 +100,50 @@ const TreeNode = ({ node, level, onImport }) => {
     }
   };
 
+  const handleDragStart = (e) => {
+    e.stopPropagation();
+    e.dataTransfer.setData('application/catlabel-node', JSON.stringify({ id: node.id, type: node.type, parent_id: node.parent_id || node.category_id || null }));
+  };
+
+  const handleDragOver = (e) => {
+    if (isFolder) {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(true);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e) => {
+    if (isFolder) {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(false);
+      try {
+        const dragged = JSON.parse(e.dataTransfer.getData('application/catlabel-node'));
+        if (dragged.id === node.id && dragged.type === node.type) return;
+        if (dragged.parent_id === node.id) return;
+        onMove(dragged, node.id);
+      } catch (err) {}
+    }
+  };
+
   return (
     <div className="w-full">
       <div
         className={`flex items-center justify-between py-1.5 px-2 group cursor-pointer border border-transparent transition-colors
-          ${isLoaded ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800' : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'}
+          ${isLoaded ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800' : isDragOver ? 'bg-blue-100 dark:bg-blue-900/50 border-blue-300 dark:border-blue-600' : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'}
         `}
         style={{ paddingLeft: `${level * 12 + 8}px` }}
+        draggable={!isEditing}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         onClick={() => {
           if (isFolder) setIsOpen(!isOpen);
           else loadProject(node);
@@ -113,9 +155,20 @@ const TreeNode = ({ node, level, onImport }) => {
           ) : (
             isBatch ? <Layers size={14} className="text-purple-500 shrink-0" /> : <FileText size={14} className="text-neutral-500 shrink-0" />
           )}
-          <span className={`text-xs truncate ${isLoaded ? 'font-bold text-blue-700 dark:text-blue-400' : 'text-neutral-700 dark:text-neutral-300'}`}>
-            {node.name}
-          </span>
+          {isEditing ? (
+            <InlineEdit
+              initialValue={node.name}
+              onSave={(val) => {
+                isFolder ? updateCategory(node.id, val) : updateProject(node.id, val);
+                setIsEditing(false);
+              }}
+              onCancel={() => setIsEditing(false)}
+            />
+          ) : (
+            <span className={`text-xs truncate ${isLoaded ? 'font-bold text-blue-700 dark:text-blue-400' : 'text-neutral-700 dark:text-neutral-300'}`}>
+              {node.name}
+            </span>
+          )}
         </div>
 
         <div onClick={(e) => e.stopPropagation()}>
@@ -167,10 +220,10 @@ const TreeNode = ({ node, level, onImport }) => {
               >
                 {isFolder && (
                   <>
-                    <button className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 text-left dark:text-white" onClick={() => { setMenuOpen(false); setIsOpen(true); const n = prompt("New Folder Name:"); if (n) createCategory(n, node.id); }}>
+                    <button className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 text-left dark:text-white" onClick={() => { setMenuOpen(false); setIsOpen(true); setCreating({ type: 'category' }); }}>
                       <Folder size={12} /> New Subfolder
                     </button>
-                    <button className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 text-left dark:text-white" onClick={() => { setMenuOpen(false); setIsOpen(true); const n = prompt("Save current canvas as:"); if (n) saveProject(n, node.id); }}>
+                    <button className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 text-left dark:text-white" onClick={() => { setMenuOpen(false); setIsOpen(true); setCreating({ type: 'project' }); }}>
                       <Save size={12} /> Save Current Here
                     </button>
                     <label className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 text-left cursor-pointer dark:text-white">
@@ -193,12 +246,8 @@ const TreeNode = ({ node, level, onImport }) => {
                   </>
                 )}
 
-                <button className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 text-left dark:text-white" onClick={() => { setMenuOpen(false); const n = prompt("Rename to:", node.name); if (n) isFolder ? updateCategory(node.id, n, node.parent_id) : updateProject(node.id, n); }}>
+                <button className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 text-left dark:text-white" onClick={() => { setMenuOpen(false); setIsEditing(true); }}>
                   <Edit2 size={12} /> Rename
-                </button>
-
-                <button className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 text-left dark:text-white" onClick={() => { setMenuOpen(false); setShowMoveModal(true); }}>
-                  <FolderOpen size={12} /> Move To...
                 </button>
 
                 <button className="flex items-center gap-2 px-3 py-2 text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800 text-left dark:text-white" onClick={handleExport}>
@@ -219,18 +268,32 @@ const TreeNode = ({ node, level, onImport }) => {
 
       {isFolder && isOpen && node.children && (
         <div className="flex flex-col border-l border-neutral-100 dark:border-neutral-800 ml-3">
+          {creating && (
+            <div className="flex items-center gap-2 py-1.5 px-2" style={{ paddingLeft: `${(level + 1) * 12 + 8}px` }}>
+              {creating.type === 'category' ? <Folder size={14} className="text-blue-500 shrink-0" /> : <FileText size={14} className="text-neutral-500 shrink-0" />}
+              <InlineEdit
+                initialValue=""
+                onSave={(val) => {
+                  creating.type === 'category' ? createCategory(val, node.id) : saveProject(val, node.id);
+                  setCreating(null);
+                }}
+                onCancel={() => setCreating(null)}
+              />
+            </div>
+          )}
           {node.children.map(child => (
-            <TreeNode key={`${child.type}-${child.id}`} node={child} level={level + 1} onImport={onImport} />
+            <TreeNode key={`${child.type}-${child.id}`} node={child} level={level + 1} onImport={onImport} onMove={onMove} />
           ))}
         </div>
       )}
-      {showMoveModal && <MoveModal node={node} onClose={() => setShowMoveModal(false)} />}
     </div>
   );
 };
 
 export default function ProjectTree() {
   const { projects, categories, createCategory, saveProject } = useStore();
+  const [creatingRoot, setCreatingRoot] = useState(null);
+  const [isRootDragOver, setIsRootDragOver] = useState(false);
 
   const treeNodes = useMemo(() => {
     const rootNodes = [];
@@ -293,17 +356,36 @@ export default function ProjectTree() {
     e.target.value = null;
   };
 
+  const handleMove = (dragged, targetCategoryId) => {
+    if (dragged.type === 'category') {
+      useStore.getState().updateCategory(dragged.id, undefined, targetCategoryId);
+    } else {
+      useStore.getState().updateProject(dragged.id, undefined, targetCategoryId);
+    }
+  };
+
+  const handleRootDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsRootDragOver(false);
+    try {
+      const dragged = JSON.parse(e.dataTransfer.getData('application/catlabel-node'));
+      if (dragged.parent_id === null) return;
+      handleMove(dragged, null);
+    } catch (err) {}
+  };
+
   return (
     <div className="flex flex-col gap-2 mt-2 w-full select-none">
       <div className="flex gap-1 mb-1">
         <button
-          onClick={() => { const n = prompt("New Root Folder Name:"); if (n) createCategory(n); }}
+          onClick={() => setCreatingRoot({ type: 'category' })}
           className="flex-1 flex items-center justify-center gap-1 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-400 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors text-[10px] uppercase font-bold tracking-wider"
         >
           <Plus size={12} /> Folder
         </button>
         <button
-          onClick={() => { const n = prompt("Save current canvas as:"); if (n) saveProject(n); }}
+          onClick={() => setCreatingRoot({ type: 'project' })}
           className="flex-1 flex items-center justify-center gap-1 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-400 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors text-[10px] uppercase font-bold tracking-wider"
         >
           <Save size={12} /> Save
@@ -314,12 +396,30 @@ export default function ProjectTree() {
         </label>
       </div>
 
-      <div className="flex flex-col max-h-64 overflow-y-auto border border-neutral-100 dark:border-neutral-800 rounded bg-white dark:bg-neutral-950">
+      <div 
+        className={`flex flex-col flex-1 max-h-64 overflow-y-auto border border-neutral-100 dark:border-neutral-800 rounded transition-colors ${isRootDragOver ? 'bg-blue-50/50 dark:bg-blue-900/10 border-blue-300 dark:border-blue-700' : 'bg-white dark:bg-neutral-950'}`}
+        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsRootDragOver(true); }}
+        onDragLeave={(e) => { e.stopPropagation(); setIsRootDragOver(false); }}
+        onDrop={handleRootDrop}
+      >
+        {creatingRoot && (
+          <div className="flex items-center gap-2 py-1.5 px-2 pl-2">
+            {creatingRoot.type === 'category' ? <Folder size={14} className="text-blue-500 shrink-0" /> : <FileText size={14} className="text-neutral-500 shrink-0" />}
+            <InlineEdit
+              initialValue=""
+              onSave={(val) => {
+                creatingRoot.type === 'category' ? createCategory(val, null) : saveProject(val, null);
+                setCreatingRoot(null);
+              }}
+              onCancel={() => setCreatingRoot(null)}
+            />
+          </div>
+        )}
         {treeNodes.length === 0 ? (
-          <div className="text-xs text-neutral-400 text-center py-4">No projects saved yet.</div>
+          <div className="text-xs text-neutral-400 text-center py-4 pointer-events-none">No projects saved yet. Drag items here to move them to the root.</div>
         ) : (
           treeNodes.map(node => (
-            <TreeNode key={`${node.type}-${node.id}`} node={node} level={0} onImport={handleImport} />
+            <TreeNode key={`${node.type}-${node.id}`} node={node} level={0} onImport={handleImport} onMove={handleMove} />
           ))
         )}
       </div>
