@@ -34,6 +34,8 @@ The easiest way to run CatLabel on Windows is using the standalone launcher.
 2. Place it in an empty folder where you want the app to reside.
 3. Double-click the executable. It will download the necessary files, configure the environment, and start the app.
 
+https://github.com/user-attachments/assets/4e784645-0ccf-478c-a6e1-0c41a3519624
+
 ### macOS & Linux
 1. Clone or download this repository.
 2. Open a terminal in the repository folder.
