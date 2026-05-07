@@ -20,7 +20,7 @@ CatLabel communicates directly with portable thermal printers over Bluetooth. It
 
 *   **Niimbot:** D-Series (D11, D110, D101), B-Series (B1, B21, B3S, B24, B18).
 *   **Phomemo:** M-Series (M02, M03, M04, M110, M200, M220), D-Series (D30), T02, P12, PM-241.
-*   **Generic:** Most generic portable printers (often sold as "Cat Printers" or "Mini Printers" using apps like Tiny Print, iBleem, or WalkPrint).
+*   **Generic:** Most generic portable printers (often sold as "Cat Printers" or "Mini Printers" using apps like Tiny Print, iBleem, WalkPrint, or Luck Jingle), including newly added Luck normal/A4 variants with paper-mode controls where supported.
 
 ---
 

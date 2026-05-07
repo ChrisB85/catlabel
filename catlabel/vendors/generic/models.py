@@ -103,6 +103,9 @@ class PrinterModel:
     can_print_label: bool
     label_value: str
     back_paper_num: int
+    protocol_variant: Optional[str] = None
+    exact_names: Tuple[str, ...] = ()
+    supported_paper_modes: Tuple[str, ...] = ()
     a4xii: bool = False
     add_mor_pix: Optional[bool] = None
     # Experimental entries are family-based proxies derived from third-party apps.
@@ -126,6 +129,7 @@ class PrinterModelMatch:
     source: PrinterModelMatchSource
     alias_kind: Optional[PrinterModelAliasKind] = None
     protocol_family: ProtocolFamily = ProtocolFamily.LEGACY
+    protocol_variant: Optional[str] = None
     image_pipeline: ImagePipelineConfig = field(
         default_factory=lambda: get_protocol_definition(ProtocolFamily.LEGACY).behavior.default_image_pipeline
     )
@@ -147,6 +151,7 @@ class PrinterModelAliasMatch:
     target_head_name: str
     kind: PrinterModelAliasKind
     protocol_family: Optional[ProtocolFamily] = None
+    protocol_variant: Optional[str] = None
     image_pipeline: Optional[ImagePipelineConfig] = None
     testing: bool = False
     testing_note: Optional[str] = None
@@ -157,6 +162,7 @@ class PrinterModelHeadAlias:
     prefixes: List[str]
     map_model_head_name: str
     protocol_family: Optional[ProtocolFamily] = None
+    protocol_variant: Optional[str] = None
     image_pipeline: Optional[ImagePipelineConfig] = None
     testing: bool = False
     testing_note: Optional[str] = None
@@ -182,6 +188,7 @@ class PrinterModelMacAlias:
     map_model_head_name: str
     only_for_targets: Tuple[str, ...] = ()
     protocol_family: Optional[ProtocolFamily] = None
+    protocol_variant: Optional[str] = None
     image_pipeline: Optional[ImagePipelineConfig] = None
     testing: bool = False
     testing_note: Optional[str] = None
@@ -262,6 +269,7 @@ class PrinterModelAliasRegistry:
                         prefixes=list(prefixes),
                         map_model_head_name=map_model_head_name,
                         protocol_family=PrinterModelAliasRegistry._parse_protocol_family(entry),
+                        protocol_variant=PrinterModelAliasRegistry._parse_protocol_variant(entry),
                         image_pipeline=PrinterModelAliasRegistry._parse_image_pipeline(entry),
                         testing=bool(entry.get("testing", False)),
                         testing_note=entry.get("testing_note"),
@@ -289,6 +297,7 @@ class PrinterModelAliasRegistry:
                         map_model_head_name=map_model_head_name,
                         only_for_targets=tuple(entry.get("only_for_targets", ())),
                         protocol_family=PrinterModelAliasRegistry._parse_protocol_family(entry),
+                        protocol_variant=PrinterModelAliasRegistry._parse_protocol_variant(entry),
                         image_pipeline=PrinterModelAliasRegistry._parse_image_pipeline(entry),
                         testing=bool(entry.get("testing", False)),
                         testing_note=entry.get("testing_note"),
@@ -304,6 +313,13 @@ class PrinterModelAliasRegistry:
         if not value:
             return None
         return ProtocolFamily.from_value(str(value))
+
+    @staticmethod
+    def _parse_protocol_variant(entry: Dict[str, object]) -> Optional[str]:
+        value = entry.get("protocol_variant")
+        if value in (None, ""):
+            return None
+        return str(value)
 
     @staticmethod
     def _parse_image_pipeline(entry: Dict[str, object]) -> Optional[ImagePipelineConfig]:
@@ -329,6 +345,7 @@ class PrinterModelAliasRegistry:
         target = match.map_model_head_name if match else None
         match_kind = PrinterModelAliasKind.HEAD_NAME if match else None
         protocol_family = match.protocol_family if match else None
+        protocol_variant = match.protocol_variant if match else None
         image_pipeline = match.image_pipeline if match else None
         testing = match.testing if match else False
         testing_note = match.testing_note if match else None
@@ -339,6 +356,7 @@ class PrinterModelAliasRegistry:
                     target = mac_alias.map_model_head_name
                     match_kind = PrinterModelAliasKind.MAC
                     protocol_family = mac_alias.protocol_family or protocol_family
+                    protocol_variant = mac_alias.protocol_variant or protocol_variant
                     image_pipeline = mac_alias.image_pipeline or image_pipeline
                     testing = mac_alias.testing
                     testing_note = mac_alias.testing_note
@@ -351,6 +369,7 @@ class PrinterModelAliasRegistry:
             target_head_name=target,
             kind=match_kind,
             protocol_family=protocol_family,
+            protocol_variant=protocol_variant,
             image_pipeline=image_pipeline,
             testing=testing,
             testing_note=testing_note,
@@ -369,6 +388,7 @@ class PrinterModelAliasRegistry:
                     target_head_name=alias.map_model_head_name,
                     kind=PrinterModelAliasKind.HEAD_NAME,
                     protocol_family=alias.protocol_family,
+                    protocol_variant=alias.protocol_variant,
                     image_pipeline=alias.image_pipeline,
                     testing=alias.testing,
                     testing_note=alias.testing_note,
@@ -385,6 +405,7 @@ class PrinterModelAliasRegistry:
                         target_head_name=mac_alias.map_model_head_name,
                         kind=PrinterModelAliasKind.MAC,
                         protocol_family=mac_alias.protocol_family,
+                        protocol_variant=mac_alias.protocol_variant,
                         image_pipeline=mac_alias.image_pipeline,
                         testing=mac_alias.testing,
                         testing_note=mac_alias.testing_note,
@@ -402,6 +423,7 @@ class PrinterModelAliasRegistry:
                     target_head_name=mac_alias.map_model_head_name,
                     kind=PrinterModelAliasKind.MAC,
                     protocol_family=mac_alias.protocol_family,
+                    protocol_variant=mac_alias.protocol_variant,
                     image_pipeline=mac_alias.image_pipeline,
                     testing=mac_alias.testing,
                     testing_note=mac_alias.testing_note,
@@ -452,6 +474,8 @@ class PrinterModelRegistry:
         payload["image_pipeline"] = _merge_image_pipeline_entry(payload, protocol_family)
         payload.pop("image_pipeline_formats", None)
         payload.pop("image_pipeline_encoding", None)
+        payload["exact_names"] = tuple(payload.get("exact_names", ()) or ())
+        payload["supported_paper_modes"] = tuple(payload.get("supported_paper_modes", ()) or ())
         return PrinterModel(**payload)
 
     @property
@@ -510,6 +534,7 @@ class PrinterModelRegistry:
                 model=match,
                 source=PrinterModelMatchSource.HEAD_NAME,
                 protocol_family=match.protocol_family,
+                protocol_variant=match.protocol_variant,
                 image_pipeline=match.image_pipeline,
                 testing=match.testing,
                 testing_note=match.testing_note,
@@ -521,6 +546,7 @@ class PrinterModelRegistry:
                 model=match,
                 source=PrinterModelMatchSource.MODEL_NO,
                 protocol_family=match.protocol_family,
+                protocol_variant=match.protocol_variant,
                 image_pipeline=match.image_pipeline,
                 testing=match.testing,
                 testing_note=match.testing_note,
@@ -532,6 +558,7 @@ class PrinterModelRegistry:
                 model=match,
                 source=PrinterModelMatchSource.HEAD_NAME,
                 protocol_family=match.protocol_family,
+                protocol_variant=match.protocol_variant,
                 image_pipeline=match.image_pipeline,
                 testing=match.testing,
                 testing_note=match.testing_note,
@@ -543,6 +570,7 @@ class PrinterModelRegistry:
                 model=match,
                 source=PrinterModelMatchSource.MODEL_NO,
                 protocol_family=match.protocol_family,
+                protocol_variant=match.protocol_variant,
                 image_pipeline=match.image_pipeline,
                 testing=match.testing,
                 testing_note=match.testing_note,
@@ -566,6 +594,7 @@ class PrinterModelRegistry:
             source=PrinterModelMatchSource.ALIAS,
             alias_kind=alias_match.kind,
             protocol_family=alias_match.protocol_family or model.protocol_family,
+            protocol_variant=alias_match.protocol_variant or model.protocol_variant,
             image_pipeline=_resolve_alias_image_pipeline(model, alias_match),
             testing=alias_match.testing or model.testing,
             testing_note=alias_match.testing_note or model.testing_note,
@@ -582,7 +611,9 @@ class PrinterModelRegistry:
         Optional[PrinterModelAliasMatch],
         List[PrinterModelAliasMatch],
     ]:
-        exact_head_matches = self._matching_models(name, key="head_name", case_sensitive=True)
+        exact_head_matches = self._matching_exact_names(name)
+        if not exact_head_matches:
+            exact_head_matches = self._matching_models(name, key="head_name", case_sensitive=True)
         if exact_head_matches:
             exact_model_no_matches = []
         else:
@@ -620,6 +651,16 @@ class PrinterModelRegistry:
             candidate = getattr(model, key)
             if candidate and name_lower.startswith(candidate.lower()):
                 matches.append(model)
+        return matches
+
+    def _matching_exact_names(self, name: str) -> List[PrinterModel]:
+        normalized = PrinterModelAliasNormalizer.normalize_alias_name(name)
+        matches: List[PrinterModel] = []
+        for model in self._models:
+            for exact_name in model.exact_names:
+                if normalized == PrinterModelAliasNormalizer.normalize_alias_name(str(exact_name)):
+                    matches.append(model)
+                    break
         return matches
 
     def _conflict_models(

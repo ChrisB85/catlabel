@@ -206,6 +206,59 @@
     "testing_note": "Experimental V10G-family alias mapped to the existing M08F profile."
   },
   {
+    "head_name": {
+      "prefixes": [
+        "APA42_",
+        "APA43_"
+      ]
+    },
+    "map_model_head_name": "APA40_"
+  },
+  {
+    "head_name": {
+      "prefixes": [
+        "APA49_"
+      ]
+    },
+    "map_model_head_name": "APA41_"
+  },
+  {
+    "head_name": {
+      "prefixes": [
+        "DP_ITP05_",
+        "ITP05H",
+        "DYA46",
+        "TPA46_",
+        "DP_A4_",
+        "DP-A4_",
+        "DP_8038_"
+      ]
+    },
+    "map_model_head_name": "ITP05_"
+  },
+  {
+    "head_name": {
+      "prefixes": [
+        "DP_ITP06_",
+        "DYA49",
+        "TPA46Pro_"
+      ]
+    },
+    "map_model_head_name": "ITP06_"
+  },
+  {
+    "head_name": {
+      "prefixes": [
+        "DP_D80_",
+        "DP-D80_",
+        "D80-",
+        "E80_",
+        "CASA-01_"
+      ]
+    },
+    "map_model_head_name": "D80_"
+  },
+  {
     "mac": {
       "suffixes": [
         "59"

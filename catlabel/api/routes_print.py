@@ -43,6 +43,7 @@ class PrinterProfileUpdate(BaseModel):
     speed: Optional[int] = None
     energy: Optional[int] = None
     feed_lines: Optional[int] = None
+    paper_mode: Optional[str] = None
 
 # SppBackend uses a cache for scanned devices
 _scanned_devices_cache: List[Any] = []
@@ -121,6 +122,8 @@ def get_printer_profile(mac_address: str):
 
 @router.put("/api/printers/{mac_address}/profile")
 def update_printer_profile(mac_address: str, update: PrinterProfileUpdate):
+    from ..protocol.types import PaperMode
+
     with Session(engine) as session:
         profile = session.exec(
             select(PrinterProfile).where(PrinterProfile.mac_address == mac_address)
@@ -134,6 +137,11 @@ def update_printer_profile(mac_address: str, update: PrinterProfileUpdate):
             profile.energy = update.energy
         if update.feed_lines is not None:
             profile.feed_lines = update.feed_lines
+        if update.paper_mode is not None:
+            try:
+                profile.paper_mode = None if update.paper_mode == "" else PaperMode(update.paper_mode).value
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail="Unsupported paper mode") from exc
 
         session.add(profile)
         session.commit()

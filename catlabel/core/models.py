@@ -11,6 +11,7 @@ class PrinterProfile(SQLModel, table=True):
     speed: Optional[int] = None
     energy: Optional[int] = None
     feed_lines: Optional[int] = None
+    paper_mode: Optional[str] = None
 
 class Font(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

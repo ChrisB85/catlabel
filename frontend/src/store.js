@@ -270,7 +270,7 @@ export const useStore = create(withHistory((set, get) => ({
   fonts: [],
   labelPresets: [],
   currentDpi: 203,
-  printerProfile: { speed: 0, energy: 0, feed_lines: 50 },
+  printerProfile: { speed: 0, energy: 0, feed_lines: 50, paper_mode: null },
   currentPage: 0,
   
   setCurrentPage: (idx) => set({ currentPage: Math.max(0, Number(idx) || 0), selectedId: null, selectedIds: [] }),
@@ -1044,7 +1044,7 @@ export const useStore = create(withHistory((set, get) => ({
     });
 
     if (!mac) {
-      set({ printerProfile: { speed: 0, energy: 0, feed_lines: 50 } });
+      set({ printerProfile: { speed: 0, energy: 0, feed_lines: 50, paper_mode: null } });
       return;
     }
 
@@ -1099,17 +1099,20 @@ export const useStore = create(withHistory((set, get) => ({
                 const migratedEnergy = Number(manProfile?.energy ?? 0);
                 const migratedFeedLines = Number(manProfile?.feed_lines ?? 50);
 
+                const migratedPaperMode = manProfile?.paper_mode || null;
                 const hasCustomSettings =
                   migratedSpeed > 0 ||
                   migratedEnergy > 0 ||
-                  migratedFeedLines !== 50;
+                  migratedFeedLines !== 50 ||
+                  !!migratedPaperMode;
 
                 if (hasCustomSettings) {
                   profile = {
                     ...profile,
                     speed: migratedSpeed > 0 ? migratedSpeed : profile?.speed,
                     energy: migratedEnergy > 0 ? migratedEnergy : profile?.energy,
-                    feed_lines: migratedFeedLines !== 50 ? migratedFeedLines : profile?.feed_lines
+                    feed_lines: migratedFeedLines !== 50 ? migratedFeedLines : profile?.feed_lines,
+                    paper_mode: migratedPaperMode || profile?.paper_mode
                   };
 
                   await fetch(`/api/printers/${mac}/profile`, {
@@ -1133,11 +1136,13 @@ export const useStore = create(withHistory((set, get) => ({
 
       const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
+      const profileEnergy = Number(profile?.energy);
+      const hasProfileEnergy = profile?.energy !== null && profile?.energy !== undefined && Number.isFinite(profileEnergy);
       const normalizedEnergy = caps.density?.available
         ? clamp(
-            (profile?.energy > 0 ? profile.energy : caps.density.default) || 3,
-            caps.density.min || 1,
-            caps.density.max || 8
+            hasProfileEnergy ? profileEnergy : (caps.density.default ?? 3),
+            caps.density.min ?? 1,
+            caps.density.max ?? 8
           )
         : (caps.energy?.available
             ? clamp(
@@ -1158,18 +1163,24 @@ export const useStore = create(withHistory((set, get) => ({
       const normalizedFeed = caps.feed?.available
         ? Math.max(0, profile?.feed_lines ?? (caps.feed.default || 50))
         : 0;
+      const supportedPaperModes = Array.isArray(info?.supported_paper_modes) ? info.supported_paper_modes : [];
+      const supportedPaperValues = supportedPaperModes.map((mode) => mode.value).filter(Boolean);
+      const normalizedPaperMode = supportedPaperValues.length > 0
+        ? (supportedPaperValues.includes(profile?.paper_mode) ? profile.paper_mode : supportedPaperValues[0])
+        : null;
 
       set({
         printerProfile: {
           ...profile,
           speed: normalizedSpeed,
           energy: normalizedEnergy,
-          feed_lines: normalizedFeed
+          feed_lines: normalizedFeed,
+          paper_mode: normalizedPaperMode
         }
       });
     } catch (e) {
       console.error("Failed to fetch or merge printer profile", e);
-      set({ printerProfile: { speed: 0, energy: 0, feed_lines: 50 } });
+      set({ printerProfile: { speed: 0, energy: 0, feed_lines: 50, paper_mode: null } });
     }
   },
   

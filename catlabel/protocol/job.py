@@ -11,7 +11,7 @@ from .commands import (
 )
 from .families import get_protocol_behavior
 from .family import ProtocolFamily
-from .types import ImageEncoding, ImagePipelineConfig
+from .types import ImageEncoding, ImagePipelineConfig, PaperMode
 
 if TYPE_CHECKING:
     from typing import Any as PrinterDevice
@@ -45,10 +45,13 @@ class PrinterProtocol:
         is_text: bool,
         blackening: int = 3,
         feed_padding: int = 0,
+        paper_mode: PaperMode | None = None,
         lsb_first: bool | None = None,
         image_pipeline: ImagePipelineConfig | None = None,
         image_encoding_override: ImageEncoding | None = None,
         pixel_format_override: PixelFormat | None = None,
+        page_index: int = 1,
+        page_count: int = 1,
     ) -> ProtocolJob:
         """Build a printable job from raster input for this device."""
         payload = self._build_payload(
@@ -56,10 +59,13 @@ class PrinterProtocol:
             is_text=is_text,
             blackening=blackening,
             feed_padding=feed_padding,
+            paper_mode=paper_mode,
             lsb_first=lsb_first,
             image_pipeline=image_pipeline,
             image_encoding_override=image_encoding_override,
             pixel_format_override=pixel_format_override,
+            page_index=page_index,
+            page_count=page_count,
         )
         return ProtocolJob(
             payload=payload,
@@ -69,9 +75,17 @@ class PrinterProtocol:
     def build_paper_motion(self, action: str) -> ProtocolJob:
         """Build a feed or retract paper-motion job for this device."""
         if action == "feed":
-            payload = advance_paper_cmd(self.device.profile.dev_dpi, self.device.protocol_family)
+            payload = advance_paper_cmd(
+                self.device.profile.dev_dpi,
+                self.device.protocol_family,
+                getattr(self.device, "protocol_variant", None),
+            )
         elif action == "retract":
-            payload = retract_paper_cmd(self.device.profile.dev_dpi, self.device.protocol_family)
+            payload = retract_paper_cmd(
+                self.device.profile.dev_dpi,
+                self.device.protocol_family,
+                getattr(self.device, "protocol_variant", None),
+            )
         else:
             raise ValueError(f"Unknown paper motion action: {action}")
         return ProtocolJob(payload=payload, runtime_controller=None)
@@ -152,6 +166,9 @@ class PrinterProtocol:
         image_pipeline: ImagePipelineConfig | None,
         image_encoding_override: ImageEncoding | None,
         pixel_format_override: PixelFormat | None,
+        paper_mode: PaperMode | None,
+        page_index: int,
+        page_count: int,
     ) -> bytes:
         resolved_pipeline = self.resolve_image_pipeline(
             image_pipeline=image_pipeline,
@@ -170,9 +187,19 @@ class PrinterProtocol:
             blackening=blackening,
             lsb_first=self._resolve_lsb_first(lsb_first),
             protocol_family=self.device.protocol_family,
+            protocol_variant=getattr(self.device, "protocol_variant", None),
             feed_padding=feed_padding,
             dev_dpi=self.device.profile.dev_dpi,
             can_print_label=self.device.profile.can_print_label,
             post_print_feed_count=self.device.profile.post_print_feed_count,
             image_pipeline=resolved_pipeline,
+            paper_mode=paper_mode,
+            page_index=page_index,
+            page_count=page_count,
         )
+
+    def supported_paper_modes(self) -> tuple[PaperMode, ...]:
+        behavior = get_protocol_behavior(self.device.protocol_family)
+        if behavior.supported_paper_modes_resolver is not None:
+            return behavior.supported_paper_modes_resolver(getattr(self.device, "protocol_variant", None))
+        return behavior.supported_paper_modes

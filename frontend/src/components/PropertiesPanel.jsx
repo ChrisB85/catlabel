@@ -135,10 +135,12 @@ export default function PropertiesPanel() {
   const isPreCut = selectedPrinterInfo?.media_type === 'pre-cut';
   const pInfo = selectedPrinterInfo || {};
   const caps = pInfo.capabilities || {};
+  const supportedPaperModes = Array.isArray(pInfo.supported_paper_modes) ? pInfo.supported_paper_modes : [];
   const maxSpeed = caps.speed?.max || 100;
   const minEnergy = caps.energy?.min || 1000;
   const maxEnergy = caps.energy?.max || 65535;
-  const maxDensity = caps.density?.max || 5;
+  const minDensity = caps.density?.min ?? 1;
+  const maxDensity = caps.density?.max ?? 5;
 
   const [panelWidth, setPanelWidth] = useState(360);
 
@@ -287,6 +289,16 @@ export default function PropertiesPanel() {
 
   const handleProfileChange = (e) => {
     const { name, value } = e.target;
+    if (name === 'paper_mode') {
+      useStore.setState((state) => ({
+        printerProfile: {
+          ...state.printerProfile,
+          paper_mode: value || null
+        }
+      }));
+      return;
+    }
+
     const rawValue = Number(value);
 
     let nextValue = Number.isFinite(rawValue) ? rawValue : 0;
@@ -555,15 +567,15 @@ export default function PropertiesPanel() {
 
               {caps.density?.available && (
                 <div>
-                  <label className={labelClass}>Print Density (1 - {maxDensity})</label>
+                  <label className={labelClass}>Print Density ({minDensity} - {maxDensity})</label>
                   <select
                     name="energy"
-                    value={printerProfile?.energy || caps.density.default || 3}
+                    value={printerProfile?.energy ?? caps.density.default ?? 3}
                     onChange={handleProfileChange}
                     disabled={!selectedPrinter}
                     className={inputClass}
                   >
-                    {Array.from({ length: maxDensity }, (_, i) => i + 1).map((level) => (
+                    {Array.from({ length: Math.max(0, maxDensity - minDensity + 1) }, (_, i) => minDensity + i).map((level) => (
                       <option key={level} value={level}>
                         {level} - {level <= 2 ? 'Light' : level >= (maxDensity - 1) ? 'Dark' : 'Normal'}
                       </option>
@@ -623,6 +635,28 @@ export default function PropertiesPanel() {
                     disabled={!selectedPrinter}
                     className={inputClass}
                   />
+                </div>
+              )}
+
+              {supportedPaperModes.length > 0 && (
+                <div>
+                  <label className={labelClass}>Paper Mode</label>
+                  <select
+                    name="paper_mode"
+                    value={printerProfile?.paper_mode || supportedPaperModes[0]?.value || ''}
+                    onChange={handleProfileChange}
+                    disabled={!selectedPrinter}
+                    className={inputClass}
+                  >
+                    {supportedPaperModes.map((mode) => (
+                      <option key={mode.value} value={mode.value}>
+                        {mode.label || mode.value}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[9px] text-neutral-400 mt-1">
+                    Controls media alignment for printers whose firmware supports labels, marks, folders, or tattoo paper.
+                  </p>
                 </div>
               )}
 

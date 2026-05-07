@@ -16,6 +16,14 @@ class GenericManifest(VendorManifest):
         return "Generic / Cat Printers"
 
     def _build_capabilities(self, raw_info: dict) -> dict:
+        protocol_family = str(raw_info.get("protocol_family") or "").lower()
+        if protocol_family in {"luck_normal", "luck_normal_a4"}:
+            return {
+                "speed": {"available": False},
+                "energy": {"available": False},
+                "density": {"available": True, "min": 0, "max": 5, "default": 1},
+                "feed": {"available": True, "default": 0},
+            }
         return {
             "speed": {
                 "available": True,
@@ -132,13 +140,18 @@ class GenericManifest(VendorManifest):
         registry = PrinterModelRegistry.load()
         model = None
 
+        match = None
         if device and hasattr(device, "model") and device.model:
             model = device.model
         else:
-            model = registry.detect_from_device_name(name, mac)
+            match = registry.detect_with_origin(name, mac)
+            model = match.model if match else None
 
         if model:
             raw = extract_raw_hardware_info(model)
+            if match is not None:
+                raw["protocol_family"] = match.protocol_family.value
+                raw["protocol_variant"] = match.protocol_variant
             if raw["vendor"] not in ("niimbot", "phomemo"):
                 raw["vendor_display"] = self.display_name
                 raw["capabilities"] = self._build_capabilities(raw)

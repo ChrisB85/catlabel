@@ -115,8 +115,33 @@ def extract_raw_hardware_info(model) -> dict:
     model_max_energy = getattr(model, "max_energy", None)
     model_max_speed = getattr(model, "max_speed", None)
     protocol_family = getattr(model, "protocol_family", "legacy")
+    protocol_variant = getattr(model, "protocol_variant", None)
     if hasattr(protocol_family, "value"):
         protocol_family = protocol_family.value
+    supported_paper_modes = tuple(getattr(model, "supported_paper_modes", ()) or ())
+    if not supported_paper_modes:
+        try:
+            from ..protocol.family import ProtocolFamily
+            from ..protocol.families import get_protocol_behavior
+
+            family = ProtocolFamily.from_value(protocol_family)
+            behavior = get_protocol_behavior(family)
+            if behavior.supported_paper_modes_resolver is not None:
+                supported_paper_modes = tuple(
+                    mode.value for mode in behavior.supported_paper_modes_resolver(protocol_variant)
+                )
+            else:
+                supported_paper_modes = tuple(mode.value for mode in behavior.supported_paper_modes)
+        except Exception:
+            supported_paper_modes = ()
+
+    def _paper_mode_label(value: str) -> str:
+        try:
+            from ..protocol.types import PaperMode
+
+            return PaperMode(value).label
+        except Exception:
+            return str(value).replace("_", " ").title()
 
     reported_default_energy = default_energy
     if vendor == "phomemo":
@@ -126,7 +151,7 @@ def extract_raw_hardware_info(model) -> dict:
         )
 
     return {
-        "name": str(getattr(model, "head_name", "") or "").strip().strip("-") or model_no,
+        "name": str(getattr(model, "head_name", "") or "").strip().strip("-_") or model_no,
         "vendor": vendor,
         "width_px": width_px,
         "width_mm": round(width_px / dpi * 25.4, 1),
@@ -154,4 +179,9 @@ def extract_raw_hardware_info(model) -> dict:
         "max_density": getattr(model, "max_density", None),
         "media_type": media_type,
         "protocol_family": str(protocol_family or "legacy"),
+        "protocol_variant": protocol_variant,
+        "supported_paper_modes": [
+            {"value": str(mode), "label": _paper_mode_label(str(mode))}
+            for mode in supported_paper_modes
+        ],
     }
