@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useStore } from '../store';
+import { useShallow } from 'zustand/react/shallow';
+import { apiFetch } from '../utils/apiClient';
 import {
   Folder, FolderOpen, FileText, Layers, MoreVertical,
   Download, Upload, Plus, Trash, Edit2, Save, Play
@@ -54,7 +56,12 @@ const TreeNode = ({ node, level, onImport, onMove }) => {
   const {
     currentProjectId, loadProject, updateProject, deleteProject,
     createCategory, updateCategory, deleteCategory, saveProject
-  } = useStore();
+  } = useStore(useShallow((state) => ({
+    currentProjectId: state.currentProjectId, loadProject: state.loadProject,
+    updateProject: state.updateProject, deleteProject: state.deleteProject,
+    createCategory: state.createCategory, updateCategory: state.updateCategory,
+    deleteCategory: state.deleteCategory, saveProject: state.saveProject
+  })));
 
   const [isOpen, setIsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -87,7 +94,7 @@ const TreeNode = ({ node, level, onImport, onMove }) => {
         return;
       }
 
-      const res = await fetch(url);
+      const res = await apiFetch(url);
       const data = await res.json();
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const link = document.createElement('a');
@@ -128,13 +135,17 @@ const TreeNode = ({ node, level, onImport, onMove }) => {
         if (dragged.id === node.id && dragged.type === node.type) return;
         if (dragged.parent_id === node.id) return;
         onMove(dragged, node.id);
-      } catch (err) {}
+      } catch (_error) {}
     }
   };
 
   return (
     <div className="w-full">
       <div
+        role="treeitem"
+        tabIndex={0}
+        aria-expanded={isFolder ? isOpen : undefined}
+        aria-current={isLoaded ? 'page' : undefined}
         className={`flex items-center justify-between py-1.5 px-2 group cursor-pointer border border-transparent transition-colors
           ${isLoaded ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800' : isDragOver ? 'bg-blue-100 dark:bg-blue-900/50 border-blue-300 dark:border-blue-600' : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'}
         `}
@@ -145,6 +156,12 @@ const TreeNode = ({ node, level, onImport, onMove }) => {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={() => {
+          if (isFolder) setIsOpen(!isOpen);
+          else loadProject(node);
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
           if (isFolder) setIsOpen(!isOpen);
           else loadProject(node);
         }}
@@ -173,6 +190,10 @@ const TreeNode = ({ node, level, onImport, onMove }) => {
 
         <div onClick={(e) => e.stopPropagation()}>
           <button
+            type="button"
+            aria-label={`Actions for ${node.name}`}
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
             onClick={(e) => {
               if (menuOpen) {
                 setMenuOpen(false);
@@ -199,16 +220,17 @@ const TreeNode = ({ node, level, onImport, onMove }) => {
               });
               setMenuOpen(true);
             }}
-            className={`p-1 rounded transition-colors ${menuOpen ? 'bg-neutral-200 dark:bg-neutral-700 text-neutral-900 dark:text-white' : 'opacity-0 group-hover:opacity-100 text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'}`}
+            className={`p-1 rounded transition-colors ${menuOpen ? 'bg-neutral-200 dark:bg-neutral-700 text-neutral-900 dark:text-white' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700'}`}
           >
             <MoreVertical size={14} />
           </button>
 
           {menuOpen && createPortal(
             <>
-              <div className="fixed inset-0 z-[9998]" onClick={() => setMenuOpen(false)}></div>
+              <button type="button" aria-label="Close project actions" className="fixed inset-0 z-[9998] cursor-default" onClick={() => setMenuOpen(false)} />
               
               <div
+                role="menu"
                 className="fixed w-48 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-xl rounded-md z-[9999] py-1 flex flex-col overflow-y-auto"
                 style={{
                   top: menuCoords.top ?? undefined,
@@ -291,7 +313,10 @@ const TreeNode = ({ node, level, onImport, onMove }) => {
 };
 
 export default function ProjectTree() {
-  const { projects, categories, createCategory, saveProject } = useStore();
+  const { projects, categories, createCategory, saveProject } = useStore(useShallow((state) => ({
+    projects: state.projects, categories: state.categories,
+    createCategory: state.createCategory, saveProject: state.saveProject
+  })));
   const [creatingRoot, setCreatingRoot] = useState(null);
   const [isRootDragOver, setIsRootDragOver] = useState(false);
 
@@ -343,11 +368,7 @@ export default function ProjectTree() {
     if (targetCategoryId) url += `?target_category_id=${targetCategoryId}`;
 
     try {
-      const res = await fetch(url, { method: 'POST', body: formData });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "Import failed");
-      }
+      await apiFetch(url, { method: 'POST', body: formData });
       useStore.getState().fetchProjects();
     } catch (err) {
       console.error(err);
@@ -372,7 +393,7 @@ export default function ProjectTree() {
       const dragged = JSON.parse(e.dataTransfer.getData('application/catlabel-node'));
       if (dragged.parent_id === null) return;
       handleMove(dragged, null);
-    } catch (err) {}
+    } catch (_error) {}
   };
 
   return (

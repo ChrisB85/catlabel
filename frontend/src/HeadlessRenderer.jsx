@@ -1,11 +1,25 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import HeadlessPage from './components/HeadlessPage';
+import { getPageIndices } from './utils/canvasPages';
+import { getPrintJobCount, getRenderPixelCount, MAX_PRINT_JOBS, MAX_RENDER_PIXELS } from './utils/batchData';
 
 
 export default function HeadlessRenderer() {
   const [payload, setPayload] = useState(() => window.__INJECTED_PAYLOAD__ || null);
-  const [, setResults] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const resultsRef = useRef([]);
+  const completedRef = useRef(false);
+
+  const markDone = useCallback((images, error = null) => {
+    window.__RENDERED_IMAGES__ = images;
+    window.__RENDER_ERROR__ = error ? String(error.message || error) : null;
+    if (!document.getElementById('render-done')) {
+      const doneMarker = document.createElement('div');
+      doneMarker.id = 'render-done';
+      doneMarker.style.opacity = '0';
+      document.body.appendChild(doneMarker);
+    }
+  }, []);
 
   useEffect(() => {
     if (payload) return undefined;
@@ -22,15 +36,38 @@ export default function HeadlessRenderer() {
     };
   }, [payload]);
 
-  const renderJobs = useMemo(() => {
-    if (!payload) return [];
+  const renderPlan = useMemo(() => {
+    if (!payload) return { jobs: [], error: null };
 
     const canvasState = payload.canvas_state || {};
-    const items = canvasState.items || [];
-    const maxPage = items.reduce((max, item) => Math.max(max, Number(item.pageIndex ?? 0)), 0);
-    const pages = Array.from({ length: maxPage + 1 }, (_, index) => index);
+    const pages = getPageIndices(canvasState, { includeCurrent: false });
     const variablesCollection = payload.variables_collection?.length ? payload.variables_collection : [{}];
     const copies = Math.max(1, Number(payload.copies) || 1);
+    const jobCount = getPrintJobCount({
+      records: variablesCollection.length,
+      copies,
+      pages: pages.length
+    });
+
+    if (jobCount > MAX_PRINT_JOBS) {
+      return {
+        jobs: [],
+        error: new Error(
+          `The render request contains ${jobCount.toLocaleString()} jobs; the limit is ${MAX_PRINT_JOBS.toLocaleString()}.`
+        )
+      };
+    }
+    const renderPixels = getRenderPixelCount({
+      width: canvasState.width,
+      height: canvasState.height,
+      jobs: jobCount
+    });
+    if (renderPixels > MAX_RENDER_PIXELS) {
+      return {
+        jobs: [],
+        error: new Error('The render request exceeds the safe in-memory pixel limit.')
+      };
+    }
 
     const jobs = [];
     variablesCollection.forEach((record, recordIndex) => {
@@ -45,13 +82,16 @@ export default function HeadlessRenderer() {
       }
     });
 
-    return jobs;
+    return { jobs, error: null };
   }, [payload]);
+  const renderJobs = renderPlan.jobs;
 
   useEffect(() => {
-    setResults([]);
+    resultsRef.current = [];
+    completedRef.current = false;
     setCurrentIndex(0);
     window.__RENDERED_IMAGES__ = [];
+    window.__RENDER_ERROR__ = null;
 
     const doneMarker = document.getElementById('render-done');
     if (doneMarker) {
@@ -61,37 +101,31 @@ export default function HeadlessRenderer() {
 
   useEffect(() => {
     if (payload && renderJobs.length === 0) {
-      window.__RENDERED_IMAGES__ = [];
-      if (!document.getElementById('render-done')) {
-        const doneMarker = document.createElement('div');
-        doneMarker.id = 'render-done';
-        doneMarker.style.opacity = '0';
-        document.body.appendChild(doneMarker);
-      }
+      markDone([], renderPlan.error);
     }
-  }, [renderJobs.length, payload]);
+  }, [markDone, renderJobs.length, renderPlan.error, payload]);
 
   const handlePageReady = useCallback((b64) => {
-    setResults((prev) => {
-      const next = [...prev, b64];
+    if (completedRef.current) return;
+    const next = [...resultsRef.current, b64];
+    resultsRef.current = next;
 
-      if (next.length === renderJobs.length) {
-        window.__RENDERED_IMAGES__ = next;
-        if (!document.getElementById('render-done')) {
-          const doneMarker = document.createElement('div');
-          doneMarker.id = 'render-done';
-          doneMarker.style.opacity = '0';
-          document.body.appendChild(doneMarker);
-        }
-      } else {
-        window.setTimeout(() => {
-          setCurrentIndex((idx) => idx + 1);
-        }, 50);
-      }
+    if (next.length === renderJobs.length) {
+      completedRef.current = true;
+      markDone(next);
+      return;
+    }
 
-      return next;
-    });
-  }, [renderJobs.length]);
+    window.setTimeout(() => {
+      setCurrentIndex((idx) => idx + 1);
+    }, 50);
+  }, [markDone, renderJobs.length]);
+
+  const handlePageError = useCallback((error) => {
+    if (completedRef.current) return;
+    completedRef.current = true;
+    markDone([], error);
+  }, [markDone]);
 
   if (!payload || renderJobs.length === 0) {
     return null;
@@ -109,6 +143,7 @@ export default function HeadlessRenderer() {
           record={activeJob.record}
           pageIndex={activeJob.pageIndex}
           onReady={handlePageReady}
+          onError={handlePageError}
         />
       )}
     </div>

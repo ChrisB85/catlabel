@@ -1,8 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useStore } from '../store';
+import { useShallow } from 'zustand/react/shallow';
+import { useDialogAccessibility } from '../utils/useDialogAccessibility';
+import { apiFetch } from '../utils/apiClient';
 import { Printer, Sparkles, Search, ChevronRight, Loader2, Bot, ArrowLeft, CheckCircle, Globe, Tag } from 'lucide-react';
 
 export default function OnboardingWizard() {
+  const dialogRef = useDialogAccessibility(null, { closeOnEscape: false });
   const {
     updateSettingsAPI,
     settings,
@@ -10,7 +14,11 @@ export default function OnboardingWizard() {
     setSelectedPrinter,
     addManualPrinter,
     setShowAiConfig
-  } = useStore();
+  } = useStore(useShallow((state) => ({
+    updateSettingsAPI: state.updateSettingsAPI, settings: state.settings,
+    selectedPrinterInfo: state.selectedPrinterInfo, setSelectedPrinter: state.setSelectedPrinter,
+    addManualPrinter: state.addManualPrinter, setShowAiConfig: state.setShowAiConfig
+  })));
 
   const [step, setStep] = useState(1);
   const [isScanning, setIsScanning] = useState(false);
@@ -23,11 +31,12 @@ export default function OnboardingWizard() {
   const [supportedModels, setSupportedModels] = useState([]);
 
   useEffect(() => {
-    fetch('/api/printers/supported_models')
+    apiFetch('/api/printers/supported_models')
       .then((res) => res.json())
       .then((data) => setSupportedModels(data.models || []))
       .catch((error) => {
         console.error('Failed to fetch supported printer models', error);
+        useStore.setState({ apiError: error.message || 'Failed to load supported printer models.' });
       });
   }, []);
 
@@ -41,11 +50,12 @@ export default function OnboardingWizard() {
     setManualStep('off');
 
     try {
-      const res = await fetch('/api/printers/scan');
+      const res = await apiFetch('/api/printers/scan');
       const data = await res.json();
       setScannedPrinters(data.devices || []);
     } catch (e) {
       console.error(e);
+      useStore.setState({ apiError: e.message || 'Failed to scan for printers.' });
       // If scan crashes, gently encourage manual mode
       setManualStep('vendor');
     } finally {
@@ -116,7 +126,7 @@ export default function OnboardingWizard() {
 
   return (
     <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white dark:bg-neutral-950 w-full max-w-3xl rounded-xl shadow-2xl flex flex-col border border-neutral-200 dark:border-neutral-800 overflow-hidden min-h-[480px]">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Welcome setup" tabIndex={-1} className="bg-white dark:bg-neutral-950 w-full max-w-3xl rounded-xl shadow-2xl flex flex-col border border-neutral-200 dark:border-neutral-800 overflow-hidden min-h-[480px]">
 
         <div className="bg-neutral-50 dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 p-6 flex items-center justify-between shrink-0">
           <div>
@@ -178,13 +188,13 @@ export default function OnboardingWizard() {
                     <div className="bg-neutral-100 dark:bg-neutral-900 px-4 py-2 text-[10px] uppercase font-bold text-neutral-500 shrink-0">Found Printers</div>
                     <div className="overflow-y-auto max-h-48">
                       {scannedPrinters.map((p) => (
-                        <div key={p.address} onClick={() => selectPrinter(p)} className="px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 border-t border-neutral-100 dark:border-neutral-800 transition-colors">
+                        <button type="button" key={p.address} onClick={() => selectPrinter(p)} className="w-full px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 border-t border-neutral-100 dark:border-neutral-800 transition-colors text-left">
                           <div>
                             <div className="font-bold dark:text-white text-sm">{p.name || p.display_address}</div>
                             <div className="text-xs text-neutral-500">{p.width_mm}mm • {p.media_type}</div>
                           </div>
                           <ChevronRight className="text-blue-500" size={16} />
-                        </div>
+                        </button>
                       ))}
                     </div>
                   </div>

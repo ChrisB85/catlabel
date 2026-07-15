@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
 import { X, Calendar } from 'lucide-react';
 import { useStore } from '../store';
+import { useShallow } from 'zustand/react/shallow';
+import { useDialogAccessibility } from '../utils/useDialogAccessibility';
 
 export default function DateToolModal({ onClose }) {
-  const { addItem, canvasWidth, settings } = useStore();
+  const dialogRef = useDialogAccessibility(onClose);
+  const { addItem, canvasWidth, settings } = useStore(useShallow((state) => ({
+    addItem: state.addItem, canvasWidth: state.canvasWidth, settings: state.settings
+  })));
   const [mode, setMode] = useState('today');
   const [offsetDays, setOffsetDays] = useState(1);
   const [customDate, setCustomDate] = useState('');
@@ -14,7 +19,8 @@ export default function DateToolModal({ onClose }) {
     if (mode === 'offset') {
       targetDate.setDate(targetDate.getDate() + parseInt(offsetDays, 10));
     } else if (mode === 'custom' && customDate) {
-      targetDate = new Date(customDate);
+      const [year, month, day] = customDate.split('-').map(Number);
+      targetDate = new Date(year, month - 1, day);
     }
 
     const yyyy = targetDate.getFullYear();
@@ -50,13 +56,13 @@ export default function DateToolModal({ onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white dark:bg-neutral-950 w-full max-w-sm rounded-xl shadow-2xl flex flex-col border border-neutral-200 dark:border-neutral-800">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Insert date" tabIndex={-1} className="bg-white dark:bg-neutral-950 w-full max-w-sm rounded-xl shadow-2xl flex flex-col border border-neutral-200 dark:border-neutral-800">
         <div className="flex items-center justify-between p-4 border-b border-neutral-100 dark:border-neutral-800">
           <div className="flex items-center gap-2">
             <Calendar className="text-blue-500" size={20} />
             <h3 className="font-serif text-lg dark:text-white">Insert Date</h3>
           </div>
-          <button onClick={onClose} className="p-2 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors">
+          <button onClick={onClose} aria-label="Close insert date dialog" className="p-2 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors">
             <X size={20} />
           </button>
         </div>

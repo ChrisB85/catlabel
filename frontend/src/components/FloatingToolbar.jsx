@@ -10,11 +10,13 @@ import {
 
 const ToolbarButton = ({ icon: Icon, onClick, active, title, className = '' }) => (
   <button
+    type="button"
     onClick={(e) => {
       e.stopPropagation();
       onClick();
     }}
     title={title}
+    aria-label={title}
     className={`p-1.5 rounded transition-colors ${
       active
         ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400'
@@ -27,13 +29,16 @@ const ToolbarButton = ({ icon: Icon, onClick, active, title, className = '' }) =
 
 const HoverMenuGroup = ({ currentIcon: Icon, title, children }) => (
   <div className="relative group flex items-center" onMouseDown={(e) => e.stopPropagation()}>
-    <div
+    <button
+      type="button"
       className="p-1.5 text-neutral-600 dark:text-neutral-400 cursor-default group-hover:text-neutral-900 dark:group-hover:text-white transition-colors"
       title={title}
+      aria-label={title}
+      aria-haspopup="menu"
     >
       <Icon size={16} strokeWidth={2.5} />
-    </div>
-    <div className="absolute bottom-full left-1/2 z-50 hidden -translate-x-1/2 group-hover:block pb-2">
+    </button>
+    <div className="absolute bottom-full left-1/2 z-50 hidden -translate-x-1/2 group-hover:block group-focus-within:block pb-2" role="menu">
       <div className="flex gap-1 rounded-lg border border-neutral-200 bg-white p-1 shadow-xl dark:border-neutral-700 dark:bg-neutral-800">
         {children}
       </div>

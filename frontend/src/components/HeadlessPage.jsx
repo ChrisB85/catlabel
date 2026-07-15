@@ -3,6 +3,8 @@ import { Layer, Line, Rect, Stage } from 'react-konva';
 import { toPng } from 'html-to-image';
 import CanvasItemNode from './CanvasItemNode';
 import HtmlLabel from './HtmlLabel';
+import { buildLabelTemplateMarkup } from './templateStyles';
+import { getPageItems, getPageLayout } from '../utils/canvasPages';
 
 const renderCanvasBorder = (canvasState) => {
   const width = Math.max(1, Number(canvasState?.width) || 384);
@@ -28,34 +30,43 @@ const renderCanvasBorder = (canvasState) => {
   return null;
 };
 
-export default function HeadlessPage({ state, record, pageIndex, onReady }) {
+const RENDER_TIMEOUT_MS = 20_000;
+
+export default function HeadlessPage({ state, record, pageIndex, onReady, onError }) {
   const stageRef = useRef(null);
   const containerRef = useRef(null);
-  const items = state?.items || [];
-  const pageLayouts = state?.pageLayouts || [];
+  const completedRef = useRef(false);
   const width = Math.max(1, Number(state?.width) || 384);
   const height = Math.max(1, Number(state?.height) || 384);
-  
-  const activeLayout = pageLayouts.find(l => l.pageIndex === pageIndex) 
-    || pageLayouts[pageLayouts.length - 1] 
-    || { htmlContent: '' };
-
-  const pageItems = useMemo(
-    () => {
-      const directItems = items.filter((item) => Number(item.pageIndex ?? 0) === pageIndex);
-      if (directItems.length > 0) return directItems;
-      const maxItemPage = items.reduce((max, item) => Math.max(max, Number(item.pageIndex ?? 0)), 0);
-      if (pageIndex > maxItemPage) {
-         return items.filter((item) => Number(item.pageIndex ?? 0) === maxItemPage);
-      }
-      return [];
-    }, [items, pageIndex]
+  const activeLayout = getPageLayout(state, pageIndex);
+  const layoutHtml = activeLayout.htmlContent || (
+    activeLayout.activeTemplate?.id
+      ? buildLabelTemplateMarkup({
+          template_id: activeLayout.activeTemplate.id,
+          params: activeLayout.activeTemplate.params || {},
+          width,
+          height
+        })
+      : ''
   );
+  const pageItems = useMemo(() => getPageItems(state?.items || [], pageIndex), [state?.items, pageIndex]);
 
   const [htmlReady, setHtmlReady] = useState(false);
 
+  const reportError = useCallback((error) => {
+    if (completedRef.current) return;
+    completedRef.current = true;
+    const normalizedError = error instanceof Error ? error : new Error(String(error));
+    console.error('Headless render failed', normalizedError);
+    onError?.(normalizedError);
+  }, [onError]);
+
+  const handleHtmlReady = useCallback(() => {
+    setHtmlReady(true);
+  }, []);
+
   const captureBoth = useCallback(async () => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || completedRef.current) return;
     try {
       if (document.fonts?.ready) await document.fonts.ready;
       await new Promise(r => setTimeout(r, 100));
@@ -65,29 +76,40 @@ export default function HeadlessPage({ state, record, pageIndex, onReady }) {
         useCORS: true,
         cacheBust: true
       });
+      if (completedRef.current) return;
+      completedRef.current = true;
       onReady(dataUrl);
     } catch (error) {
-      console.error('Headless capture failed', error);
+      reportError(error);
     }
-  }, [onReady]);
+  }, [onReady, reportError]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      reportError(new Error(`Label rendering timed out after ${RENDER_TIMEOUT_MS / 1000} seconds.`));
+    }, RENDER_TIMEOUT_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [reportError]);
 
   useEffect(() => {
     if (htmlReady) {
       captureBoth();
     }
-  }, [htmlReady, captureBoth, record, state, width, height]);
+  }, [htmlReady, captureBoth]);
 
   return (
     <div ref={containerRef} style={{ width, height, position: 'absolute', backgroundColor: 'white' }}>
       <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
         <HtmlLabel
-          html={activeLayout.htmlContent || ''}
+          html={layoutHtml}
           record={record}
           width={width}
           height={height}
           canvasBorder={state?.canvasBorder}
           canvasBorderThickness={state?.canvasBorderThickness}
-          onRenderComplete={() => setHtmlReady(true)}
+          onRenderComplete={handleHtmlReady}
+          onRenderError={reportError}
         />
       </div>
       <div style={{ position: 'absolute', inset: 0, zIndex: 2 }}>

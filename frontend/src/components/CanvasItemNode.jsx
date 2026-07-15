@@ -4,6 +4,7 @@ import Konva from 'konva';
 import { toPng } from 'html-to-image';
 import { applyVars, calculateAutoFitItem, computeOptimalTextSize, processHtmlDynamicElements, resolveDim, useCodeGenerator } from '../utils/rendering';
 import { useStore } from '../store';
+import { sanitizeLabelHtml } from '../utils/htmlSecurity';
 
 
 const useHtmlRasterizer = (htmlString, width, height, isTemplate = false, font = 'Arial') => {
@@ -47,7 +48,7 @@ const useHtmlRasterizer = (htmlString, width, height, isTemplate = false, font =
     container.style.height = `${height}px`;
     container.style.fontFamily = `'${fontFamily}', sans-serif`;
     
-    container.innerHTML = htmlString;
+    container.innerHTML = sanitizeLabelHtml(htmlString);
 
     const rasterize = async () => {
       try {
@@ -238,7 +239,7 @@ const renderItemBorder = (item, visualW, approxHeight) => {
   return null;
 };
 
-export default function CanvasItemNode({
+function CanvasItemNode({
   item,
   record,
   canvasWidth,
@@ -251,10 +252,7 @@ export default function CanvasItemNode({
   onDragEnd
 }) {
   const substitutedText = applyVars(item.text, record);
-  const substitutedTitle = applyVars(item.title, record);
-  const substitutedSubtitle = applyVars(item.subtitle, record);
   const substitutedHtml = applyVars(item.html, record);
-  const substitutedCustomHtml = applyVars(item.custom_html, record);
   const substitutedData = applyVars(item.data, record);
 
   const { visualW, approxHeight, actualLineHeight, pad: activePad } = getVisualMetrics(item, substitutedText, canvasWidth, canvasHeight);
@@ -280,10 +278,10 @@ export default function CanvasItemNode({
         y: resolvedY,
         rotation: activeItem.rotation || 0,
         draggable: activeItem.type !== 'cut_line_indicator',
-        onMouseDown,
-        onTouchStart,
-        onDragMove,
-        onDragEnd,
+        onMouseDown: (event) => onMouseDown?.(event, item),
+        onTouchStart: (event) => onTouchStart?.(event, item),
+        onDragMove: (event) => onDragMove?.(event, item),
+        onDragEnd: (event) => onDragEnd?.(event, item),
         onTransformEnd: () => {
           const node = groupRef.current;
           if (!node) return;
@@ -464,3 +462,5 @@ export default function CanvasItemNode({
     </Group>
   );
 }
+
+export default React.memo(CanvasItemNode);

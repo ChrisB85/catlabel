@@ -2,9 +2,14 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { X, LayoutTemplate, Star } from 'lucide-react';
 import { useStore } from '../store';
+import { useShallow } from 'zustand/react/shallow';
+import { useDialogAccessibility } from '../utils/useDialogAccessibility';
 
 export default function PresetPickerModal({ onClose }) {
-  const { labelPresets, applyPreset, selectedPrinterInfo } = useStore();
+  const dialogRef = useDialogAccessibility(onClose);
+  const { labelPresets, applyPreset, selectedPrinterInfo } = useStore(useShallow((state) => ({
+    labelPresets: state.labelPresets, applyPreset: state.applyPreset, selectedPrinterInfo: state.selectedPrinterInfo
+  })));
   const activePreset = useStore((state) => state.getActivePreset());
 
   const vendor = (selectedPrinterInfo?.vendor || '').toLowerCase();
@@ -94,13 +99,13 @@ export default function PresetPickerModal({ onClose }) {
 
   return createPortal(
     <div className="fixed inset-0 bg-black/50 z-[105] flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white dark:bg-neutral-950 w-full max-w-3xl rounded-xl shadow-2xl flex flex-col max-h-[85vh] border border-neutral-200 dark:border-neutral-800">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Choose label preset" tabIndex={-1} className="bg-white dark:bg-neutral-950 w-full max-w-3xl rounded-xl shadow-2xl flex flex-col max-h-[85vh] border border-neutral-200 dark:border-neutral-800">
         <div className="flex items-center justify-between p-4 border-b border-neutral-100 dark:border-neutral-800 shrink-0">
           <div className="flex items-center gap-2">
             <LayoutTemplate className="text-blue-500" size={20} />
             <h3 className="font-serif text-lg dark:text-white">Canvas Presets</h3>
           </div>
-          <button onClick={onClose} className="p-2 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors">
+          <button onClick={onClose} aria-label="Close preset picker" className="p-2 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors">
             <X size={20} />
           </button>
         </div>

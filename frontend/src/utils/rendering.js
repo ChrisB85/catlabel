@@ -1,12 +1,31 @@
 import { useEffect, useState } from 'react';
 import Konva from 'konva';
-import bwipjs from 'bwip-js';
-import QRCode from 'qrcode';
+
+let barcodeModulePromise;
+let qrCodeModulePromise;
+const getBarcodeModule = () => {
+  barcodeModulePromise ||= import('bwip-js').then((module) => module.default || module);
+  return barcodeModulePromise;
+};
+const getQrCodeModule = () => {
+  qrCodeModulePromise ||= import('qrcode').then((module) => module.default || module);
+  return qrCodeModulePromise;
+};
+
+const IMAGE_LOAD_TIMEOUT_MS = 8_000;
 
 const loadInjectedImage = (src) => new Promise((resolve) => {
   const image = document.createElement('img');
-  image.onload = () => resolve(image);
-  image.onerror = () => resolve(null);
+  let settled = false;
+  const finish = (value) => {
+    if (settled) return;
+    settled = true;
+    window.clearTimeout(timeoutId);
+    resolve(value);
+  };
+  const timeoutId = window.setTimeout(() => finish(null), IMAGE_LOAD_TIMEOUT_MS);
+  image.onload = () => finish(image);
+  image.onerror = () => finish(null);
   image.src = src;
 });
 
@@ -30,6 +49,7 @@ export const processHtmlDynamicElements = async (container, width, height, isCan
       let dataUrl = null;
 
       if (type === 'barcode') {
+        const bwipjs = await getBarcodeModule();
         const canvas = document.createElement('canvas');
         bwipjs.toCanvas(canvas, {
           bcid: format,
@@ -40,6 +60,7 @@ export const processHtmlDynamicElements = async (container, width, height, isCan
         });
         dataUrl = canvas.toDataURL('image/png');
       } else if (type === 'qrcode') {
+        const QRCode = await getQrCodeModule();
         dataUrl = await QRCode.toDataURL(value, {
           margin: 1,
           scale: 16,
@@ -72,8 +93,18 @@ export const processHtmlDynamicElements = async (container, width, height, isCan
   await Promise.all(imgEls.map((img) => {
     if (img.complete) return Promise.resolve();
     return new Promise((resolve) => {
-      img.onload = resolve;
-      img.onerror = resolve;
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        img.removeEventListener('load', finish);
+        img.removeEventListener('error', finish);
+        resolve();
+      };
+      const timeoutId = window.setTimeout(finish, IMAGE_LOAD_TIMEOUT_MS);
+      img.addEventListener('load', finish, { once: true });
+      img.addEventListener('error', finish, { once: true });
     });
   }));
 
@@ -204,6 +235,7 @@ export const useCodeGenerator = (type, data, barcodeType) => {
         const canvas = document.createElement('canvas');
 
         try {
+          const bwipjs = await getBarcodeModule();
           let bcid = 'code128';
           if (barcodeType === 'code39') bcid = 'code39';
           if (barcodeType === 'ean13') bcid = 'ean13';
@@ -228,6 +260,7 @@ export const useCodeGenerator = (type, data, barcodeType) => {
       }
 
       try {
+        const QRCode = await getQrCodeModule();
         const dataUrl = await QRCode.toDataURL(String(data), {
           margin: 1,
           scale: 24,
@@ -269,7 +302,7 @@ export const computeOptimalTextSize = (baseItem, textToFit, targetWidth, targetH
 
   let low = 6;
   let high = 800;
-  let bestSize = baseItem.size || 24;
+  let bestSize = low;
 
   const textNode = new Konva.Text({
     text: textToFit,
@@ -328,8 +361,7 @@ export const calculateAutoFitItem = (item, batchRecords = [{}], canvasWidth = 38
 
   const records = Array.isArray(batchRecords) && batchRecords.length > 0 ? batchRecords : [{}];
   const strings = records.map((record) => applyVars(item.text, record) || '');
-  const uniqueStrings = [...new Set(strings)].sort((a, b) => b.length - a.length);
-  const stringsToTest = uniqueStrings.filter((value) => String(value).length > 0).slice(0, 10);
+  const uniqueStrings = [...new Set(strings)].filter((value) => String(value).length > 0);
 
   const resolvedW = resolveDim(item.width || 100, canvasWidth);
   const resolvedH = resolveDim(item.height || 50, canvasHeight);
@@ -338,6 +370,27 @@ export const calculateAutoFitItem = (item, batchRecords = [{}], canvasWidth = 38
     const pad = item.padding !== undefined ? Number(item.padding) : 0;
     const targetWidth = Math.max(10, resolvedW - (pad * 2));
     const targetHeight = Math.max(10, resolvedH - (pad * 2));
+
+    const probe = new Konva.Text({
+      fontFamily: item.font ? item.font.split('.')[0] : 'Arial',
+      fontStyle: [item.italic ? 'italic' : '', item.weight || 700].filter(Boolean).join(' '),
+      fontSize: 100,
+      lineHeight: item.lineHeight ?? 1
+    });
+    const stringsToTest = uniqueStrings
+      .map((value) => {
+        probe.text(String(value));
+        const metrics = probe.getClientRect();
+        const longestWordWidth = String(value).split(/\s+/).reduce((largest, word) => {
+          probe.text(word);
+          return Math.max(largest, probe.getClientRect().width);
+        }, 0);
+        return { value, score: Math.max(metrics.width / targetWidth, metrics.height / targetHeight, longestWordWidth / targetWidth) };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 25)
+      .map(({ value }) => value);
+    probe.destroy();
 
     let overallBestSize = null;
     for (const actualText of stringsToTest) {
@@ -351,6 +404,7 @@ export const calculateAutoFitItem = (item, batchRecords = [{}], canvasWidth = 38
   }
 
   if (item.type === 'icon_text') {
+    const stringsToTest = uniqueStrings;
     let overallBestScale = null;
 
     for (const actualText of stringsToTest) {

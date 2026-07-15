@@ -1,10 +1,12 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Group, Layer, Line, Path, Rect, Stage, Transformer } from 'react-konva';
 import { useStore } from '../store';
+import { useShallow } from 'zustand/react/shallow';
 import CanvasItemNode from './CanvasItemNode';
 import FloatingToolbar from './FloatingToolbar';
 import HtmlLabel from './HtmlLabel';
-import { toPng } from 'html-to-image';
+import HeadlessPage from './HeadlessPage';
+import { getPageIndices, getPageItems, getPageLayout, normalizePageIndex } from '../utils/canvasPages';
 
 const WORKSPACE_PAD = 40;
 const SNAP_T = 10;
@@ -21,8 +23,6 @@ export default function CanvasArea() {
     zoomScale,
     canvasBorder,
     canvasBorderThickness,
-    snapLines,
-    setSnapLines,
     settings,
     isRotated,
     currentPage,
@@ -33,43 +33,91 @@ export default function CanvasArea() {
     selectedPagesForPrint,
     printPages,
     selectedPrinterInfo,
-    currentDpi
-  } = useStore();
+    currentDpi,
+    splitMode,
+    pageLayouts,
+    batchRecords
+  } = useStore(useShallow((state) => ({
+    items: state.items,
+    selectedId: state.selectedId,
+    selectedIds: state.selectedIds,
+    selectItem: state.selectItem,
+    updateItem: state.updateItem,
+    canvasWidth: state.canvasWidth,
+    canvasHeight: state.canvasHeight,
+    zoomScale: state.zoomScale,
+    canvasBorder: state.canvasBorder,
+    canvasBorderThickness: state.canvasBorderThickness,
+    settings: state.settings,
+    isRotated: state.isRotated,
+    currentPage: state.currentPage,
+    setCurrentPage: state.setCurrentPage,
+    addPage: state.addPage,
+    deletePage: state.deletePage,
+    togglePageForPrint: state.togglePageForPrint,
+    selectedPagesForPrint: state.selectedPagesForPrint,
+    printPages: state.printPages,
+    selectedPrinterInfo: state.selectedPrinterInfo,
+    currentDpi: state.currentDpi,
+    splitMode: state.splitMode,
+    pageLayouts: state.pageLayouts,
+    batchRecords: state.batchRecords
+  })));
 
-  const { splitMode } = useStore();
+  const [snapLines, setSnapLines] = useState([]);
   const [selectionBox, setSelectionBox] = useState(null);
   const [isPanning, setIsPanning] = useState(false);
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
   const trRef = useRef(null);
   const containerRef = useRef(null);
-  const previewWrapperRefs = useRef({}); 
+  const captureResolverRef = useRef(null);
+  const [captureRequest, setCaptureRequest] = useState(null);
   const cvThick = canvasBorderThickness || 4;
-  const pageLayouts = useStore((state) => state.pageLayouts) || [];
 
   useEffect(() => {
-    window.__getStageB64 = async () => {
-      const firstWrapper = previewWrapperRefs.current[0];
-      if (firstWrapper) {
-         try {
-           return await toPng(firstWrapper, { pixelRatio: 1, backgroundColor: 'white', cacheBust: true });
-         } catch (e) {
-           console.error('Failed to capture Stage preview', e);
-           return null;
-         }
+    window.__getStageB64 = () => new Promise((resolve, reject) => {
+      if (captureResolverRef.current) {
+        reject(new Error('A clean canvas capture is already in progress.'));
+        return;
       }
-      return null;
+
+      const state = useStore.getState();
+      captureResolverRef.current = { resolve, reject };
+      setCaptureRequest({
+        id: Date.now(),
+        pageIndex: state.currentPage,
+        record: state.batchRecords?.[0] || {},
+        state: {
+          width: state.canvasWidth,
+          height: state.canvasHeight,
+          canvasBorder: state.canvasBorder,
+          canvasBorderThickness: state.canvasBorderThickness,
+          items: state.items,
+          pageLayouts: state.pageLayouts
+        }
+      });
+    });
+
+    return () => {
+      delete window.__getStageB64;
+      captureResolverRef.current?.reject(new Error('Canvas capture was cancelled.'));
+      captureResolverRef.current = null;
     };
-    return () => { delete window.__getStageB64; };
+  }, []);
+
+  const finishCapture = useCallback((dataUrl, error = null) => {
+    const resolver = captureResolverRef.current;
+    captureResolverRef.current = null;
+    setCaptureRequest(null);
+    if (!resolver) return;
+    if (error) resolver.reject(error);
+    else resolver.resolve(dataUrl);
   }, []);
   const dotsPerMm = (currentDpi || settings.default_dpi || 203) / 25.4;
   const printPx = selectedPrinterInfo?.width_px || Math.round((settings.print_width_mm || 48) * dotsPerMm);
-  const batchRecords = useStore((state) => state.batchRecords) || [{}];
-  const visibleRecords = batchRecords.slice(0, 10);
+  const visibleRecords = (batchRecords || [{}]).slice(0, 10);
   
-  const maxItemPage = items.reduce((max, item) => Math.max(max, Number(item.pageIndex ?? 0)), 0);
-  const maxLayoutPage = pageLayouts.reduce((max, l) => Math.max(max, Number(l.pageIndex ?? 0)), 0);
-  const maxDisplayedPage = Math.max(maxItemPage, maxLayoutPage, currentPage);
-  const pages = Array.from({ length: maxDisplayedPage + 1 }, (_, index) => index);
+  const pages = getPageIndices({ items, pageLayouts, currentPage });
   
   const selectedItem = items.find((item) => item.id === selectedId);
 
@@ -146,7 +194,7 @@ export default function CanvasArea() {
     return { x: item.x, y: item.y, width: w, height: h };
   }, []);
 
-  const handleDragMove = (e, draggedItem) => {
+  const handleDragMove = useCallback((e, draggedItem) => {
     const node = e.target;
     const x = node.x();
     const y = node.y();
@@ -210,9 +258,9 @@ export default function CanvasArea() {
 
     node.position({ x: newX, y: newY });
     setSnapLines(lines);
-  };
+  }, [canvasHeight, canvasWidth, currentPage, getBoundingBox, items]);
 
-  const handleDragEnd = (e, item) => {
+  const handleDragEnd = useCallback((e, item) => {
     setSnapLines([]);
     const newX = e.target.x();
     const newY = e.target.y();
@@ -226,12 +274,20 @@ export default function CanvasArea() {
     } else {
       updateItem(item.id, { x: newX, y: newY });
     }
-  };
+  }, [updateItem]);
+
+  const handleItemPointerDown = useCallback((e, item) => {
+    if (isPanning) return;
+    e.cancelBubble = true;
+    setCurrentPage(normalizePageIndex(item.pageIndex));
+    const isMulti = e.evt.shiftKey || e.evt.ctrlKey || e.evt.metaKey;
+    selectItem(item.id, isMulti);
+  }, [isPanning, selectItem, setCurrentPage]);
 
   return (
     <div 
       ref={containerRef}
-      className={`flex-1 flex flex-col items-center p-8 bg-neutral-100 dark:bg-neutral-900 transition-colors duration-300 gap-8 ${isPanning ? 'cursor-grab active:cursor-grabbing overflow-hidden' : 'overflow-auto'}`}
+      className={`flex-1 flex flex-col items-center p-2 sm:p-8 bg-neutral-100 dark:bg-neutral-900 transition-colors duration-300 gap-8 ${isPanning ? 'cursor-grab active:cursor-grabbing overflow-hidden' : 'overflow-auto'}`}
     >
       <div className="text-neutral-400 dark:text-neutral-500 text-[10px] uppercase tracking-widest font-bold sticky top-0 bg-neutral-100 dark:bg-neutral-900/90 z-10 py-1">
         Canvas Feed Engine: {isRotated ? 'Landscape' : 'Portrait'}
@@ -247,11 +303,8 @@ export default function CanvasArea() {
             )}
 
             {pages.map((pageIndex, pageIdx) => {
-              let pageItems = items.filter((item) => Number(item.pageIndex ?? 0) === pageIndex);
-              let layout = pageLayouts.find(l => l.pageIndex === pageIndex);
-              
-              if (!layout && pageIndex > maxLayoutPage) layout = pageLayouts[pageLayouts.length - 1] || { htmlContent: '' };
-              if (pageItems.length === 0 && pageIndex > maxItemPage) pageItems = items.filter((item) => Number(item.pageIndex ?? 0) === maxItemPage);
+              const pageItems = getPageItems(items, pageIndex);
+              const layout = getPageLayout({ pageLayouts }, pageIndex);
 
               const isActive = currentPage === pageIndex;
               const showControls = (rIdx === 0);
@@ -310,12 +363,11 @@ export default function CanvasArea() {
                     }}
                     onClick={() => {
                       if (!isActive) {
-                        setCurrentPage(visualPageIndex);
+                        setCurrentPage(pageIndex);
                       }
                     }}
                   >
                     <div
-                      ref={el => { if (isActive && rIdx === 0) previewWrapperRefs.current[0] = el; }}
                       style={{
                         position: 'relative',
                         width: (canvasWidth + WORKSPACE_PAD * 2) * zoomScale,
@@ -513,22 +565,10 @@ export default function CanvasArea() {
                                 canvasHeight={canvasHeight}
                                 isSelected={selectedIds.includes(item.id)}
                                 interactive={!isPanning}
-                                onMouseDown={(e) => {
-                                  if (isPanning) return;
-                                  e.cancelBubble = true;
-                                  setCurrentPage(pageIndex);
-                                  const isMulti = e.evt.shiftKey || e.evt.ctrlKey || e.evt.metaKey;
-                                  selectItem(item.id, isMulti);
-                                }}
-                                onTouchStart={(e) => {
-                                  if (isPanning) return;
-                                  e.cancelBubble = true;
-                                  setCurrentPage(pageIndex);
-                                  const isMulti = e.evt.shiftKey || e.evt.ctrlKey || e.evt.metaKey;
-                                  selectItem(item.id, isMulti);
-                                }}
-                                onDragMove={(e) => handleDragMove(e, item)}
-                                onDragEnd={(e) => handleDragEnd(e, item)}
+                                onMouseDown={handleItemPointerDown}
+                                onTouchStart={handleItemPointerDown}
+                                onDragMove={handleDragMove}
+                                onDragEnd={handleDragEnd}
                               />
                             ))}
 
@@ -610,6 +650,19 @@ export default function CanvasArea() {
       <div className="text-neutral-400 dark:text-neutral-600 text-[10px] uppercase tracking-widest sticky bottom-0 bg-neutral-100 dark:bg-neutral-900/90 py-1 z-10">
         Drag items to move. Click empty space to deselect. Hold Space to Pan.
       </div>
+
+      {captureRequest && (
+        <div aria-hidden="true" style={{ position: 'fixed', left: '-100000px', top: 0 }}>
+          <HeadlessPage
+            key={captureRequest.id}
+            state={captureRequest.state}
+            record={captureRequest.record}
+            pageIndex={captureRequest.pageIndex}
+            onReady={(dataUrl) => finishCapture(dataUrl)}
+            onError={(error) => finishCapture(null, error)}
+          />
+        </div>
+      )}
     </div>
   );
 }

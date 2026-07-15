@@ -1,18 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../store';
+import { useShallow } from 'zustand/react/shallow';
 import {
   AlignCenter, MoveHorizontal, Maximize2, Sliders, Printer, Database, Sparkles,
-  Plus, Trash2, FileSpreadsheet, Bold, Italic, Underline
+  Plus, Bold, Italic, Underline
 } from 'lucide-react';
-import beautify from 'js-beautify';
-import AIAssistant from './AIAssistant';
-import BatchPrintModal from './BatchPrintModal';
-import IconPicker from './IconPicker';
 import { calculateAutoFitItem } from '../utils/rendering';
 import { TEMPLATE_METADATA } from './templateStyles';
+import { apiFetch } from '../utils/apiClient';
+import BatchDataPanel from './BatchDataPanel';
 
-const pxToMm = (px) => (px / 8).toFixed(1);
-const mmToPx = (mm) => Math.round(mm * 8);
+const AIAssistant = React.lazy(() => import('./AIAssistant'));
+const IconPicker = React.lazy(() => import('./IconPicker'));
 
 const MmScrubberInput = ({ name, value, onChange, label, disabled }) => {
   const getPxToMm = useStore((state) => state.getPxToMm);
@@ -130,7 +129,20 @@ const ToggleBtn = ({ icon: Icon, active, onClick, label }) => (
 );
 
 export default function PropertiesPanel() {
-  const { items, selectedId, updateItem, deleteItem, canvasWidth, canvasHeight, canvasBorder, setCanvasBorder, canvasBorderThickness, setCanvasBorderThickness, setCanvasSize, getMmToPx, getPxToMm, settings, updateSettingsAPI, fonts, uploadFont, isRotated, setIsRotated, splitMode, setSplitMode, printerProfile, selectedPrinter, selectedPrinterInfo, batchRecords, setBatchRecords, updateBatchRecord, addBatchRecord, removeBatchRecord, generateBatchMatrix, generateBatchSequence, pageLayouts, currentPage, setHtmlContent, updateTemplateParams, ejectTemplate } = useStore();
+  const { items, selectedId, updateItem, deleteItem, canvasWidth, canvasHeight, canvasBorder, setCanvasBorder, canvasBorderThickness, setCanvasBorderThickness, setCanvasGeometry, getMmToPx, getPxToMm, settings, updateSettingsAPI, fonts, uploadFont, isRotated, setIsRotated, splitMode, setSplitMode, printerProfile, selectedPrinter, selectedPrinterInfo, batchRecords, pageLayouts, currentPage, setHtmlContent, updateTemplateParams, ejectTemplate, isPropertiesOpen, toggleProperties } = useStore(useShallow((state) => ({
+    items: state.items, selectedId: state.selectedId, updateItem: state.updateItem, deleteItem: state.deleteItem,
+    canvasWidth: state.canvasWidth, canvasHeight: state.canvasHeight, canvasBorder: state.canvasBorder,
+    setCanvasBorder: state.setCanvasBorder, canvasBorderThickness: state.canvasBorderThickness,
+    setCanvasBorderThickness: state.setCanvasBorderThickness, setCanvasGeometry: state.setCanvasGeometry,
+    getMmToPx: state.getMmToPx, getPxToMm: state.getPxToMm, settings: state.settings,
+    updateSettingsAPI: state.updateSettingsAPI, fonts: state.fonts, uploadFont: state.uploadFont,
+    isRotated: state.isRotated, setIsRotated: state.setIsRotated, splitMode: state.splitMode,
+    setSplitMode: state.setSplitMode, printerProfile: state.printerProfile, selectedPrinter: state.selectedPrinter,
+    selectedPrinterInfo: state.selectedPrinterInfo, batchRecords: state.batchRecords,
+    pageLayouts: state.pageLayouts, currentPage: state.currentPage, setHtmlContent: state.setHtmlContent,
+    updateTemplateParams: state.updateTemplateParams, ejectTemplate: state.ejectTemplate,
+    isPropertiesOpen: state.isPropertiesOpen, toggleProperties: state.toggleProperties
+  })));
   const selectedItem = items.find(i => i.id === selectedId);
   const isPreCut = selectedPrinterInfo?.media_type === 'pre-cut';
   const pInfo = selectedPrinterInfo || {};
@@ -146,12 +158,8 @@ export default function PropertiesPanel() {
 
   // Tab State
   const [activeTab, setActiveTab] = useState('canvas');
-  const [showBatchModal, setShowBatchModal] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [templateIconField, setTemplateIconField] = useState(null);
-  const [dataMode, setDataMode] = useState('table');
-  const [matrixInputs, setMatrixInputs] = useState({});
-  const [seqInputs, setSeqInputs] = useState({ varName: '', start: 1, end: 10, prefix: '', suffix: '', padding: 3 });
   
   const currentLayout = pageLayouts.find(l => l.pageIndex === currentPage) || { htmlContent: '', activeTemplate: null };
   const activeTemplate = currentLayout.activeTemplate;
@@ -276,7 +284,8 @@ export default function PropertiesPanel() {
     updateItem(selectedId, { [name]: parsedValue });
   };
 
-  const handleFormatHtml = (target) => {
+  const handleFormatHtml = async (target) => {
+    const beautify = (await import('js-beautify')).default;
     if (target === 'designMode') {
       const formatted = beautify.html(htmlContent, { indent_size: 2 });
       setHtmlContent(formatted);
@@ -323,19 +332,16 @@ export default function PropertiesPanel() {
     if (!selectedPrinter) return;
     setIsSaving(true);
     try {
-      await fetch(`/api/printers/${selectedPrinter}/profile`, {
+      await apiFetch(`/api/printers/${selectedPrinter}/profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(useStore.getState().printerProfile)
       });
     } catch (e) {
       console.error("Failed to save printer profile", e);
+      useStore.setState({ apiError: e.message || 'Failed to save the printer profile.' });
     }
     setTimeout(() => setIsSaving(false), 1500);
-  };
-
-  const handleLocalSettingChange = (e) => {
-    setLocalSettings({ ...localSettings, [e.target.name]: Number(e.target.value) });
   };
 
   const handleSaveSettings = async () => {
@@ -344,95 +350,75 @@ export default function PropertiesPanel() {
     setTimeout(() => setIsSaving(false), 1500);
   };
 
-  // Restrict one axis strictly to the hardware print width, letting the feed axis grow infinitely.
-  const dotsPerMm = localSettings.default_dpi / 25.4;
-  const printPx = Math.round(localSettings.print_width_mm * dotsPerMm);
-
-  const collectItemTemplateValues = (item) => {
-    if (!item) return '';
-
-    const directValues = [
-      item.text || '',
-      item.title || '',
-      item.subtitle || '',
-      item.data || '',
-      item.html || '',
-      item.custom_html || '',
-      ...Object.values(item.params || {}).map((value) => String(value || ''))
-    ].join(' ');
-
-    const childValues = (item.children || []).map((child) => collectItemTemplateValues(child)).join(' ');
-    return `${directValues} ${childValues}`;
-  };
-
-  const templateStr = items.map((item) => collectItemTemplateValues(item)).join(' ') + ' ' + pageLayouts.map(l => l.htmlContent).join(' ');
-  const templateMatches = templateStr.match(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g) || [];
-  const templateKeys = templateMatches.map((match) => match.replace(/[{}]/g, '').trim());
-  const existingKeys = batchRecords.flatMap((record) => Object.keys(record || {}));
-  const allBatchKeys = Array.from(new Set([...templateKeys, ...existingKeys]));
-  const createEmptyBatchRecord = () => allBatchKeys.reduce((acc, key) => ({ ...acc, [key]: '' }), {});
-  const batchKeySignature = allBatchKeys.join('||');
-
-  useEffect(() => {
-    setMatrixInputs((prev) => {
-      const next = {};
-      allBatchKeys.forEach((key) => {
-        next[key] = prev[key] ?? '';
-      });
-      return next;
-    });
-  }, [batchKeySignature]);
+  if (!isPropertiesOpen) return null;
 
   return (
-    <div 
-      className="bg-white dark:bg-neutral-950 border-l border-neutral-200 dark:border-neutral-800 flex flex-col z-10 overflow-hidden transition-colors duration-300 relative shrink-0"
-      style={{ width: panelWidth }}
+    <div
+      className="fixed inset-y-0 right-0 bg-white dark:bg-neutral-950 border-l border-neutral-200 dark:border-neutral-800 flex flex-col z-30 overflow-hidden transition-colors duration-300 shrink-0 shadow-2xl xl:relative xl:inset-auto xl:z-10 xl:shadow-none"
+      style={{ width: panelWidth, maxWidth: '100vw' }}
     >
-      <div 
+      <div
+        role="separator"
+        aria-label="Resize properties panel"
+        aria-orientation="vertical"
+        aria-valuemin={280}
+        aria-valuemax={600}
+        aria-valuenow={panelWidth}
+        tabIndex={0}
         className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-500 z-50 transition-colors"
         onMouseDown={handleResizeMouseDown}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowLeft') setPanelWidth((width) => Math.min(600, width + 10));
+          if (event.key === 'ArrowRight') setPanelWidth((width) => Math.max(280, width - 10));
+        }}
       />
+
+      <button type="button" onClick={toggleProperties} aria-label="Close properties panel" className="absolute right-2 top-2 z-50 rounded p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-800 dark:hover:text-white xl:hidden">×</button>
       
       {/* TABS */}
-      <div className="flex border-b border-neutral-200 dark:border-neutral-800">
-        <button 
+      <div className="flex border-b border-neutral-200 dark:border-neutral-800" role="tablist" aria-label="Properties sections">
+        <button
+          type="button" role="tab" aria-selected={activeTab === 'element'} aria-label="Element and layout"
           onClick={() => setActiveTab('element')}
           className={`flex-1 flex justify-center py-4 transition-colors relative group
             ${activeTab === 'element' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50 dark:bg-blue-900/20' : 'text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-900'}
           `}
         >
           <Sliders size={20} />
-          <span className="absolute top-full mt-1 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 z-50 pointer-events-none whitespace-nowrap font-bold uppercase tracking-widest">Element / Layout</span>
+          <span className="absolute top-full mt-1 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 group-focus:opacity-100 z-50 pointer-events-none whitespace-nowrap font-bold uppercase tracking-widest">Element / Layout</span>
         </button>
         
-        <button 
+        <button
+          type="button" role="tab" aria-selected={activeTab === 'canvas'} aria-label="Canvas and printer"
           onClick={() => setActiveTab('canvas')}
           className={`flex-1 flex justify-center py-4 transition-colors relative group
             ${activeTab === 'canvas' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50 dark:bg-blue-900/20' : 'text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-900'}
           `}
         >
           <Printer size={20} />
-          <span className="absolute top-full mt-1 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 z-50 pointer-events-none whitespace-nowrap font-bold uppercase tracking-widest">Canvas & Printer</span>
+          <span className="absolute top-full mt-1 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 group-focus:opacity-100 z-50 pointer-events-none whitespace-nowrap font-bold uppercase tracking-widest">Canvas & Printer</span>
         </button>
 
-        <button 
+        <button
+          type="button" role="tab" aria-selected={activeTab === 'data'} aria-label="Batch data"
           onClick={() => setActiveTab('data')}
           className={`flex-1 flex justify-center py-4 transition-colors relative group
             ${activeTab === 'data' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50 dark:bg-blue-900/20' : 'text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-900'}
           `}
         >
           <Database size={20} />
-          <span className="absolute top-full mt-1 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 z-50 pointer-events-none whitespace-nowrap font-bold uppercase tracking-widest">Batch Data</span>
+          <span className="absolute top-full mt-1 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 group-focus:opacity-100 z-50 pointer-events-none whitespace-nowrap font-bold uppercase tracking-widest">Batch Data</span>
         </button>
 
-        <button 
+        <button
+          type="button" role="tab" aria-selected={activeTab === 'assistant'} aria-label="AI assistant"
           onClick={() => setActiveTab('assistant')}
           className={`flex-1 flex justify-center py-4 transition-colors relative group
             ${activeTab === 'assistant' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50 dark:bg-blue-900/20' : 'text-neutral-500 hover:bg-neutral-50 dark:hover:bg-neutral-900'}
           `}
         >
           <Sparkles size={20} />
-          <span className="absolute top-full mt-1 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 z-50 pointer-events-none whitespace-nowrap font-bold uppercase tracking-widest">AI Assistant</span>
+          <span className="absolute top-full mt-1 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 group-focus:opacity-100 z-50 pointer-events-none whitespace-nowrap font-bold uppercase tracking-widest">AI Assistant</span>
         </button>
       </div>
 
@@ -460,8 +446,8 @@ export default function PropertiesPanel() {
               
               {splitMode && !isPreCut && (
                 <div className="flex gap-2 mt-2">
-                  <button onClick={() => { setCanvasSize(840, 1184); setIsRotated(false); }} className="flex-1 py-2 bg-neutral-100 dark:bg-neutral-900 text-[10px] font-bold uppercase hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors">A6</button>
-                  <button onClick={() => { setCanvasSize(1184, 1680); setIsRotated(false); }} className="flex-1 py-2 bg-neutral-100 dark:bg-neutral-900 text-[10px] font-bold uppercase hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors">A5</button>
+                  <button onClick={() => setCanvasGeometry(getMmToPx(105), getMmToPx(148), false)} className="flex-1 py-2 bg-neutral-100 dark:bg-neutral-900 text-[10px] font-bold uppercase hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors">A6</button>
+                  <button onClick={() => setCanvasGeometry(getMmToPx(148), getMmToPx(210), false)} className="flex-1 py-2 bg-neutral-100 dark:bg-neutral-900 text-[10px] font-bold uppercase hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors">A5</button>
                 </div>
               )}
 
@@ -476,14 +462,14 @@ export default function PropertiesPanel() {
                   name="width" 
                   label={isRotated ? "Paper Length" : "Print Width"} 
                   value={canvasWidth} 
-                  onChange={(e) => setCanvasSize(Number(e.target.value), canvasHeight)} 
+                  onChange={(e) => setCanvasGeometry(Number(e.target.value), canvasHeight, isRotated)}
                   disabled={!isRotated}
                 />
                 <MmScrubberInput 
                   name="height" 
                   label={isRotated ? "Print Width" : "Paper Length"} 
                   value={canvasHeight} 
-                  onChange={(e) => setCanvasSize(canvasWidth, Number(e.target.value))} 
+                  onChange={(e) => setCanvasGeometry(canvasWidth, Number(e.target.value), isRotated)}
                   disabled={isRotated}
                 />
               </div>
@@ -547,7 +533,7 @@ export default function PropertiesPanel() {
                   <label className={labelClass}>Adjust Tape Length</label>
                   <div className="flex items-center gap-2 mt-2">
                     <button
-                      onClick={() => setCanvasSize(Math.max(getMmToPx(5), canvasWidth - getMmToPx(5)), canvasHeight)}
+                      onClick={() => setCanvasGeometry(Math.max(getMmToPx(5), canvasWidth - getMmToPx(5)), canvasHeight, isRotated)}
                       className="w-8 h-8 flex items-center justify-center bg-white dark:bg-neutral-950 border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors rounded text-lg font-bold dark:text-white"
                     >
                       -
@@ -556,7 +542,7 @@ export default function PropertiesPanel() {
                       {parseFloat(getPxToMm(canvasWidth)).toFixed(0)} mm
                     </span>
                     <button
-                      onClick={() => setCanvasSize(canvasWidth + getMmToPx(5), canvasHeight)}
+                      onClick={() => setCanvasGeometry(canvasWidth + getMmToPx(5), canvasHeight, isRotated)}
                       className="w-8 h-8 flex items-center justify-center bg-white dark:bg-neutral-950 border border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors rounded text-lg font-bold dark:text-white"
                     >
                       +
@@ -660,12 +646,12 @@ export default function PropertiesPanel() {
                 </div>
               )}
 
-              <button 
-                onClick={handleSaveProfile} 
+              <button
+                onClick={handleSaveProfile}
                 disabled={isSaving || !selectedPrinter}
-                className={`w-full mt-4 py-3 rounded-none transition-colors text-xs uppercase tracking-widest font-bold border 
-                  ${isSaving 
-                    ? 'bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800' 
+                className={`w-full mt-4 py-3 rounded-none transition-colors text-xs uppercase tracking-widest font-bold border
+                  ${isSaving
+                    ? 'bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800'
                     : 'bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 border-transparent hover:bg-neutral-800 dark:hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed'}`}
               >
                 {isSaving ? 'Settings Saved ✓' : 'Save Printer Settings'}
@@ -1156,232 +1142,36 @@ export default function PropertiesPanel() {
         )}
 
         {/* === DATA TAB === */}
-        {activeTab === 'data' && (
-          <div className="space-y-4">
-            <h2 className="text-lg font-serif tracking-tight text-neutral-900 dark:text-white pb-2 border-b border-neutral-100 dark:border-neutral-800">Variable Data</h2>
-            <p className="text-[10px] text-neutral-500 mb-2 leading-relaxed">
-              Variables replace matching <code>{`{{ variable }}`}</code> tags on the canvas. Each row represents one printed label.
-            </p>
-
-            <div className="flex gap-2 mb-4">
-              <button
-                onClick={() => setDataMode('table')}
-                className={`flex-1 py-2 text-[10px] uppercase font-bold tracking-widest transition-colors border ${dataMode === 'table' ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400' : 'bg-neutral-50 border-transparent text-neutral-500 dark:bg-neutral-900'}`}
-              >
-                Table
-              </button>
-              <button
-                onClick={() => setDataMode('matrix')}
-                className={`flex-1 py-2 text-[10px] uppercase font-bold tracking-widest transition-colors border ${dataMode === 'matrix' ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400' : 'bg-neutral-50 border-transparent text-neutral-500 dark:bg-neutral-900'}`}
-              >
-                Permutations
-              </button>
-              <button
-                onClick={() => setDataMode('sequence')}
-                className={`flex-1 py-2 text-[10px] uppercase font-bold tracking-widest transition-colors border ${dataMode === 'sequence' ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400' : 'bg-neutral-50 border-transparent text-neutral-500 dark:bg-neutral-900'}`}
-              >
-                Sequence
-              </button>
-            </div>
-
-            <div className="flex gap-2 mb-2">
-              <button onClick={() => setShowBatchModal(true)} className="flex-1 flex items-center justify-center gap-2 py-1.5 bg-neutral-100 dark:bg-neutral-900 hover:bg-neutral-200 dark:hover:bg-neutral-800 text-neutral-600 dark:text-neutral-300 text-[10px] uppercase font-bold tracking-widest transition-colors">
-                <FileSpreadsheet size={14} /> Import CSV
-              </button>
-              <button onClick={() => setBatchRecords([createEmptyBatchRecord()])} className="px-3 py-1.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors" title="Clear All Data">
-                <Trash2 size={14} />
-              </button>
-            </div>
-
-            {allBatchKeys.length === 0 && (
-              <div className="text-center p-4 border border-dashed border-neutral-300 dark:border-neutral-700 text-neutral-400 text-xs">
-                No variables detected on canvas.<br/><br/> Add a text element containing a tag like <code>{`{{ name }}`}</code> to get started.
-              </div>
-            )}
-
-            {allBatchKeys.length > 0 && dataMode === 'table' && (
-              <div className="w-full overflow-x-auto border border-neutral-200 dark:border-neutral-800">
-                <table className="w-full text-left text-xs whitespace-nowrap">
-                  <thead className="bg-neutral-100 dark:bg-neutral-900 text-[10px] uppercase tracking-wider text-neutral-500">
-                    <tr>
-                      <th className="p-2 font-bold w-8 text-center">#</th>
-                      {allBatchKeys.map((key) => (
-                        <th key={key} className="p-2 font-bold border-l border-neutral-200 dark:border-neutral-800">
-                          {key}
-                        </th>
-                      ))}
-                      <th className="p-2 w-8"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800 bg-white dark:bg-neutral-950">
-                    {batchRecords.map((record, index) => (
-                      <tr key={index} className="hover:bg-neutral-50 dark:hover:bg-neutral-900/50">
-                        <td className="p-2 text-center text-neutral-400">{index + 1}</td>
-                        {allBatchKeys.map((key) => (
-                          <td key={key} className="border-l border-neutral-200 dark:border-neutral-800 p-0">
-                            <input
-                              type="text"
-                              value={record[key] || ''}
-                              onChange={(e) => updateBatchRecord(index, { ...record, [key]: e.target.value })}
-                              className="w-full h-full p-2 bg-transparent focus:outline-none focus:bg-blue-50 dark:focus:bg-blue-900/20 dark:text-white transition-colors"
-                              placeholder="..."
-                            />
-                          </td>
-                        ))}
-                        <td className="p-1 border-l border-neutral-200 dark:border-neutral-800">
-                          <button onClick={() => removeBatchRecord(index)} className="w-full h-full p-1 text-neutral-400 hover:text-red-500 flex justify-center items-center">
-                            <Trash2 size={12} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <button onClick={() => addBatchRecord(createEmptyBatchRecord())} className="w-full flex justify-center items-center gap-2 py-2 bg-neutral-50 dark:bg-neutral-900 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors text-[10px] uppercase tracking-widest font-bold">
-                  <Plus size={14} /> Add Row
-                </button>
-              </div>
-            )}
-
-            {allBatchKeys.length > 0 && dataMode === 'matrix' && (
-              <div className="space-y-3 p-4 border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/50">
-                <p className="text-[10px] text-neutral-500 mb-2 leading-relaxed">
-                  Type comma-separated lists for each variable. We will automatically generate all combinations (Cartesian product).
-                </p>
-                {allBatchKeys.map((key) => (
-                  <div key={key}>
-                    <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1 block">{key} (comma separated)</label>
-                    <input
-                      type="text"
-                      value={matrixInputs[key] || ''}
-                      onChange={(e) => setMatrixInputs((prev) => ({ ...prev, [key]: e.target.value }))}
-                      className="w-full bg-white dark:bg-neutral-950 border border-neutral-300 dark:border-neutral-700 p-2 text-xs focus:outline-none focus:border-blue-500 transition-colors dark:text-white"
-                      placeholder="e.g. item 1, item 2, item 3"
-                    />
-                  </div>
-                ))}
-                <button
-                  onClick={() => {
-                    generateBatchMatrix(matrixInputs);
-                    setDataMode('table');
-                  }}
-                  className="w-full mt-2 flex justify-center items-center gap-2 py-2 bg-blue-600 text-white hover:bg-blue-700 transition-colors text-[10px] uppercase tracking-widest font-bold"
-                >
-                  Generate Combinations
-                </button>
-              </div>
-            )}
-
-            {allBatchKeys.length > 0 && dataMode === 'sequence' && (
-              <div className="space-y-3 p-4 border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/50">
-                <p className="text-[10px] text-neutral-500 mb-2 leading-relaxed">
-                  Generate serialized numbers (e.g. Asset Tags, Barcodes).
-                </p>
-                <div>
-                  <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1 block">Target Variable</label>
-                  <select
-                    value={seqInputs.varName}
-                    onChange={e => setSeqInputs({ ...seqInputs, varName: e.target.value })}
-                    className={inputClass}
-                  >
-                    <option value="" disabled>Select variable...</option>
-                    {allBatchKeys.map((k) => (
-                      <option key={k} value={k}>{k}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <label className="text-[10px] font-bold text-neutral-500 uppercase mb-1 block">Prefix</label>
-                    <input
-                      type="text"
-                      value={seqInputs.prefix}
-                      onChange={e => setSeqInputs({ ...seqInputs, prefix: e.target.value })}
-                      className={inputClass}
-                      placeholder="BOX-"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="text-[10px] font-bold text-neutral-500 uppercase mb-1 block">Suffix</label>
-                    <input
-                      type="text"
-                      value={seqInputs.suffix}
-                      onChange={e => setSeqInputs({ ...seqInputs, suffix: e.target.value })}
-                      className={inputClass}
-                    />
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <label className="text-[10px] font-bold text-neutral-500 uppercase mb-1 block">Start #</label>
-                    <input
-                      type="number"
-                      value={seqInputs.start}
-                      onChange={e => setSeqInputs({ ...seqInputs, start: e.target.value })}
-                      className={inputClass}
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="text-[10px] font-bold text-neutral-500 uppercase mb-1 block">End #</label>
-                    <input
-                      type="number"
-                      value={seqInputs.end}
-                      onChange={e => setSeqInputs({ ...seqInputs, end: e.target.value })}
-                      className={inputClass}
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <label className="text-[10px] font-bold text-neutral-500 uppercase mb-1 block">0-Pad</label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="10"
-                      value={seqInputs.padding}
-                      onChange={e => setSeqInputs({ ...seqInputs, padding: e.target.value })}
-                      className={inputClass}
-                    />
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    generateBatchSequence(seqInputs);
-                    setDataMode('table');
-                  }}
-                  disabled={!seqInputs.varName}
-                  className="w-full mt-2 flex justify-center items-center gap-2 py-2 bg-blue-600 text-white hover:bg-blue-700 transition-colors text-[10px] uppercase tracking-widest font-bold disabled:opacity-50"
-                >
-                  Generate Sequence
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+        {activeTab === 'data' && <BatchDataPanel />}
 
         {/* === ASSISTANT TAB === */}
         {activeTab === 'assistant' && (
-           <AIAssistant />
+          <React.Suspense fallback={<div className="p-4 text-sm text-neutral-500">Loading assistant…</div>}>
+            <AIAssistant />
+          </React.Suspense>
         )}
       </div>
 
-      {showBatchModal && <BatchPrintModal onClose={() => setShowBatchModal(false)} />}
-      {showIconPicker && (
-        <IconPicker 
-          onClose={() => setShowIconPicker(false)} 
-          onSelect={(b64) => {
-            updateItem(selectedId, { icon_src: b64 });
-            setShowIconPicker(false);
-          }} 
-        />
-      )}
-      {templateIconField && activeTemplate && (
-        <IconPicker
-          onClose={() => setTemplateIconField(null)}
-          onSelect={(b64) => {
-            updateTemplateParams({ [templateIconField]: b64 });
-            setTemplateIconField(null);
-          }}
-        />
-      )}
+      <React.Suspense fallback={null}>
+        {showIconPicker && (
+          <IconPicker
+            onClose={() => setShowIconPicker(false)}
+            onSelect={(b64) => {
+              updateItem(selectedId, { icon_src: b64 });
+              setShowIconPicker(false);
+            }}
+          />
+        )}
+        {templateIconField && activeTemplate && (
+          <IconPicker
+            onClose={() => setTemplateIconField(null)}
+            onSelect={(b64) => {
+              updateTemplateParams({ [templateIconField]: b64 });
+              setTemplateIconField(null);
+            }}
+          />
+        )}
+      </React.Suspense>
     </div>
   );
 }

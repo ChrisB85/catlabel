@@ -1,13 +1,14 @@
-import React, { useEffect } from 'react';
+import React, { lazy, Suspense, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Toolbar from './components/Toolbar';
 import CanvasArea from './components/CanvasArea';
 import PropertiesPanel from './components/PropertiesPanel';
-import OnboardingWizard from './components/OnboardingWizard';
-import AIConfigModal from './components/AIConfigModal';
-import LocalBatchRenderer from './components/LocalBatchRenderer';
 import HeadlessRenderer from './HeadlessRenderer';
 import { useStore } from './store';
+
+const OnboardingWizard = lazy(() => import('./components/OnboardingWizard'));
+const AIConfigModal = lazy(() => import('./components/AIConfigModal'));
+const LocalBatchRenderer = lazy(() => import('./components/LocalBatchRenderer'));
 
 function App() {
   const theme = useStore((state) => state.theme);
@@ -18,11 +19,15 @@ function App() {
   const setShowAiConfig = useStore((state) => state.setShowAiConfig);
   const isPreparingForPrint = useStore((state) => state.isPreparingForPrint);
   const onLocalRenderComplete = useStore((state) => state.onLocalRenderComplete);
+  const apiError = useStore((state) => state.apiError);
+  const clearApiError = useStore((state) => state.clearApiError);
   const isHeadless = new URLSearchParams(window.location.search).get('mode') === 'headless';
 
   useEffect(() => {
     fetchFonts();
+  }, [fetchFonts]);
 
+  useEffect(() => {
     const root = window.document.documentElement;
     root.classList.remove('light', 'dark');
 
@@ -32,7 +37,7 @@ function App() {
     } else {
       root.classList.add(theme);
     }
-  }, [theme, fetchFonts]);
+  }, [theme]);
 
   if (isHeadless) {
     return <HeadlessRenderer />;
@@ -46,9 +51,17 @@ function App() {
         <CanvasArea />
       </div>
       <PropertiesPanel />
-      {isPreparingForPrint && <LocalBatchRenderer onComplete={onLocalRenderComplete} />}
-      {settingsLoaded && (!settings.intended_media_type || settings.intended_media_type === 'unknown') && <OnboardingWizard />}
-      {showAiConfig && <AIConfigModal onClose={() => setShowAiConfig(false)} />}
+      {apiError && (
+        <div role="alert" className="fixed bottom-4 left-1/2 z-[100] flex max-w-xl -translate-x-1/2 items-start gap-3 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-900 shadow-xl dark:border-red-800 dark:bg-red-950 dark:text-red-100">
+          <span className="flex-1">{apiError}</span>
+          <button type="button" onClick={clearApiError} className="font-bold" aria-label="Dismiss error">×</button>
+        </div>
+      )}
+      <Suspense fallback={null}>
+        {isPreparingForPrint && <LocalBatchRenderer onComplete={onLocalRenderComplete} />}
+        {settingsLoaded && (!settings.intended_media_type || settings.intended_media_type === 'unknown') && <OnboardingWizard />}
+        {showAiConfig && <AIConfigModal onClose={() => setShowAiConfig(false)} />}
+      </Suspense>
     </div>
   );
 }

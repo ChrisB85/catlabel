@@ -1,31 +1,42 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Save, Plus, Trash, Eye, CheckCircle2, Circle, Settings2 } from 'lucide-react';
+import { apiFetch, apiJson } from '../utils/apiClient';
+import { useDialogAccessibility } from '../utils/useDialogAccessibility';
 
 export default function AIConfigModal({ onClose }) {
+  const dialogRef = useDialogAccessibility(onClose);
   const [providers, setProviders] = useState([]);
   const [selectedProviderId, setSelectedProviderId] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const fetchProviders = useCallback(async () => {
+    try {
+      const data = await apiJson('/api/ai/config', {}, {
+        validate: (value) => Array.isArray(value) && value.every((provider) => (
+          provider && typeof provider === 'object' && Array.isArray(provider.models)
+        )),
+        validationMessage: 'AI provider data is malformed.'
+      });
+      setProviders(data);
+
+      if (data.length > 0) {
+        let activeProviderId = data[0].id;
+        data.forEach((provider) => {
+          if (provider.models.some((model) => model.is_active)) activeProviderId = provider.id;
+        });
+        setSelectedProviderId(activeProviderId);
+      }
+    } catch (fetchError) {
+      console.error('Failed to load AI providers', fetchError);
+      setError(fetchError.message || 'Failed to load AI providers.');
+    }
+  }, []);
 
   useEffect(() => {
     fetchProviders();
-  }, []);
-
-  const fetchProviders = async () => {
-    const res = await fetch('/api/ai/config');
-    const data = await res.json();
-    setProviders(data);
-
-    if (data.length > 0 && !selectedProviderId) {
-      let activeProviderId = data[0].id;
-      data.forEach((provider) => {
-        if (provider.models.some((model) => model.is_active)) {
-          activeProviderId = provider.id;
-        }
-      });
-      setSelectedProviderId(activeProviderId);
-    }
-  };
+  }, [fetchProviders]);
 
   const handleAddProvider = () => {
     const timestamp = Date.now();
@@ -130,17 +141,21 @@ export default function AIConfigModal({ onClose }) {
     }
 
     if (confirm("Delete this provider and all its models?")) {
-      await fetch(`/api/ai/config/${id}`, { method: 'DELETE' });
-      const nextProviders = providers.filter((provider) => provider.id !== id);
-      setProviders(nextProviders);
-      if (selectedProviderId === id) {
-        setSelectedProviderId(nextProviders[0]?.id || null);
+      try {
+        await apiFetch(`/api/ai/config/${id}`, { method: 'DELETE' });
+        const nextProviders = providers.filter((provider) => provider.id !== id);
+        setProviders(nextProviders);
+        if (selectedProviderId === id) setSelectedProviderId(nextProviders[0]?.id || null);
+      } catch (deleteError) {
+        setError(deleteError.message || 'Failed to delete the AI provider.');
       }
     }
   };
 
   const handleSave = async () => {
     setSaving(true);
+    setError('');
+    let saved = true;
 
     for (const provider of providers) {
       const payload = { ...provider };
@@ -157,18 +172,21 @@ export default function AIConfigModal({ onClose }) {
       });
 
       try {
-        await fetch('/api/ai/config', {
+        await apiFetch('/api/ai/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
       } catch (e) {
         console.error("Failed to save provider", provider.name, e);
+        setError(e.message || `Failed to save ${provider.name}.`);
+        saved = false;
+        break;
       }
     }
 
     setSaving(false);
-    onClose();
+    if (saved) onClose();
   };
 
   const current = providers.find((provider) => provider.id === selectedProviderId);
@@ -177,7 +195,7 @@ export default function AIConfigModal({ onClose }) {
 
   const modalContent = (
     <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white dark:bg-neutral-950 w-full max-w-4xl rounded-xl shadow-2xl flex border border-neutral-200 dark:border-neutral-800 h-[85vh] max-h-[700px] overflow-hidden">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="AI provider settings" tabIndex={-1} className="bg-white dark:bg-neutral-950 w-full max-w-4xl rounded-xl shadow-2xl flex border border-neutral-200 dark:border-neutral-800 h-[85vh] max-h-[700px] overflow-hidden">
         <div className="w-1/3 border-r border-neutral-100 dark:border-neutral-800 flex flex-col bg-neutral-50 dark:bg-neutral-900/50">
           <div className="p-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between">
             <h3 className="font-serif text-base dark:text-white">AI Providers</h3>
@@ -189,17 +207,16 @@ export default function AIConfigModal({ onClose }) {
             {providers.map((provider) => (
               <div
                 key={provider.id}
-                onClick={() => setSelectedProviderId(provider.id)}
-                className={`p-3 rounded-lg cursor-pointer flex justify-between items-center transition-colors ${selectedProviderId === provider.id ? 'bg-white dark:bg-neutral-800 shadow border border-neutral-200 dark:border-neutral-700' : 'hover:bg-neutral-100 dark:hover:bg-neutral-800 border border-transparent'}`}
+                className={`rounded-lg flex items-center transition-colors ${selectedProviderId === provider.id ? 'bg-white dark:bg-neutral-800 shadow border border-neutral-200 dark:border-neutral-700' : 'hover:bg-neutral-100 dark:hover:bg-neutral-800 border border-transparent'}`}
               >
-                <div>
+                <button type="button" onClick={() => setSelectedProviderId(provider.id)} className="min-w-0 flex-1 p-3 text-left">
                   <div className="text-sm font-bold dark:text-white">{provider.name}</div>
                   <div className="text-[10px] text-neutral-500 uppercase mt-1 flex gap-2">
                     <span>{provider.provider}</span>
                     <span className="text-blue-500">{provider.models.length} Models</span>
                   </div>
-                </div>
-                <button onClick={(e) => { e.stopPropagation(); handleDeleteProvider(provider.id); }} className="text-neutral-400 hover:text-red-500">
+                </button>
+                <button type="button" aria-label={`Delete ${provider.name}`} onClick={() => handleDeleteProvider(provider.id)} className="mr-2 p-2 text-neutral-400 hover:text-red-500">
                   <Trash size={14} />
                 </button>
               </div>
@@ -214,10 +231,12 @@ export default function AIConfigModal({ onClose }) {
               <Settings2 size={18} className="text-blue-500" />
               Configure Provider
             </h3>
-            <button onClick={onClose} className="p-2 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors">
+            <button onClick={onClose} aria-label="Close AI settings" className="p-2 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors">
               <X size={20} />
             </button>
           </div>
+
+          {error && <div role="alert" className="border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">{error}</div>}
 
           {current ? (
             <div className="p-6 overflow-y-auto flex-1">

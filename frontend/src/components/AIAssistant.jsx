@@ -16,6 +16,8 @@ import {
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useStore } from '../store';
+import { getPageIndices } from '../utils/canvasPages';
+import { apiFetch } from '../utils/apiClient';
 
 const MessageRow = ({ m }) => {
   if (m.role === 'tool') return null;
@@ -144,7 +146,7 @@ export default function AIAssistant() {
 
   const fetchHistories = async () => {
     try {
-      const res = await fetch('/api/ai/history');
+      const res = await apiFetch('/api/ai/history');
       const data = await res.json();
       setHistories(data);
     } catch (e) {
@@ -177,13 +179,11 @@ export default function AIAssistant() {
 
     try {
       if (currentConvId) {
-        const res = await fetch(`/api/ai/history/${currentConvId}/trace`);
-        if (res.ok) {
-          const traces = await res.json();
-          out += '## RAW LLM TRACES (Database Logs)\n\n';
-          out += `\`\`\`json\n${JSON.stringify(traces, null, 2)}\n\`\`\`\n\n`;
-          out += '---\n\n';
-        }
+        const res = await apiFetch(`/api/ai/history/${currentConvId}/trace`);
+        const traces = await res.json();
+        out += '## RAW LLM TRACES (Database Logs)\n\n';
+        out += `\`\`\`json\n${JSON.stringify(traces, null, 2)}\n\`\`\`\n\n`;
+        out += '---\n\n';
       }
 
       out += '## UI MESSAGE HISTORY\n\n';
@@ -206,7 +206,7 @@ export default function AIAssistant() {
             try {
               const parsedArgs = JSON.parse(tc.function?.arguments || '{}');
               out += `${JSON.stringify(sanitizeObj(parsedArgs), null, 2)}\n`;
-            } catch (e) {
+            } catch (_error) {
               let rawArgs = tc.function?.arguments || '';
               if (rawArgs.length > 500) rawArgs = `${rawArgs.substring(0, 200)}...[TRUNCATED]`;
               out += `${rawArgs}\n`;
@@ -233,7 +233,7 @@ export default function AIAssistant() {
   const saveConversation = async (msgs, convId) => {
     try {
       if (convId) {
-        await fetch(`/api/ai/history/${convId}`, {
+        await apiFetch(`/api/ai/history/${convId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ messages: msgs })
@@ -246,7 +246,7 @@ export default function AIAssistant() {
 
   const loadHistory = async (id) => {
     try {
-      const res = await fetch(`/api/ai/history/${id}`);
+      const res = await apiFetch(`/api/ai/history/${id}`);
       const data = await res.json();
       setMessages(data.messages);
       setCurrentConvId(id);
@@ -259,7 +259,7 @@ export default function AIAssistant() {
 
   const deleteHistory = async (id) => {
     try {
-      await fetch(`/api/ai/history/${id}`, { method: 'DELETE' });
+      await apiFetch(`/api/ai/history/${id}`, { method: 'DELETE' });
       if (currentConvId === id) setCurrentConvId(null);
       fetchHistories();
     } catch (e) {
@@ -270,13 +270,7 @@ export default function AIAssistant() {
   const executeCanvasActions = (canvasState) => {
     (canvasState.__actions__ || []).forEach((action) => {
       if (action.action === 'print') {
-        const actionItems = canvasState.items || [];
-        const maxPage = actionItems.reduce(
-          (max, item) => Math.max(max, Number(item.pageIndex ?? 0)),
-          0
-        );
-        const allPageIndices = Array.from({ length: maxPage + 1 }, (_, index) => index);
-        useStore.getState().printPages(allPageIndices);
+        useStore.getState().printPages(getPageIndices(canvasState));
       } else if (action.action === 'refresh_projects') {
         useStore.getState().fetchProjects();
       } else if (action.action === 'loaded_project_id') {
@@ -295,25 +289,7 @@ export default function AIAssistant() {
     if (!canvasState) return;
 
     const store = useStore.getState();
-
-    if (canvasState.pageLayouts) {
-      useStore.setState({ pageLayouts: canvasState.pageLayouts });
-    }
-
-    store.setItems(canvasState.items || []);
-
-    if (canvasState.width && canvasState.height) {
-      store.setCanvasSize(canvasState.width, canvasState.height);
-    }
-    if (canvasState.isRotated !== undefined) store.setIsRotated(canvasState.isRotated);
-    if (canvasState.splitMode !== undefined) store.setSplitMode(canvasState.splitMode);
-    if (canvasState.canvasBorder !== undefined) store.setCanvasBorder(canvasState.canvasBorder);
-    if (canvasState.canvasBorderThickness !== undefined) {
-      store.setCanvasBorderThickness(canvasState.canvasBorderThickness);
-    }
-    if (canvasState.batchRecords) store.setBatchRecords(canvasState.batchRecords);
-    if (canvasState.printCopies !== undefined) store.setPrintCopies(canvasState.printCopies);
-    if (canvasState.currentPage !== undefined) store.setCurrentPage(canvasState.currentPage);
+    store.hydrateCanvasState(canvasState);
 
     executeCanvasActions(canvasState);
   };
@@ -332,7 +308,7 @@ export default function AIAssistant() {
     if (!activeConvId) {
       try {
         const title = `${textToSend.substring(0, 30)}...`;
-        const res = await fetch('/api/ai/history', {
+        const res = await apiFetch('/api/ai/history', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ title, messages: baseMessages })
@@ -353,7 +329,7 @@ export default function AIAssistant() {
     try {
       const b64Image = await storeState.getStageB64();
 
-      const res = await fetch('/api/ai/chat', {
+      const res = await apiFetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -388,7 +364,7 @@ export default function AIAssistant() {
           applyCanvasState(data.canvas_state);
         }
       }
-    } catch (err) {
+    } catch (_error) {
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', content: 'Failed to connect to the AI Agent.' }
@@ -409,7 +385,7 @@ export default function AIAssistant() {
 
     try {
       const storeState = useStore.getState();
-      const res = await fetch('/api/ai/manual/prompt-builder', {
+      const res = await apiFetch('/api/ai/manual/prompt-builder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -420,17 +396,13 @@ export default function AIAssistant() {
         })
       });
 
-      if (!res.ok) {
-        throw new Error(`Server returned ${res.status}`);
-      }
-
       const data = await res.json();
       setExternalPrompt(data.prompt || '');
       if (!data.prompt) {
         setExternalError('Server returned an empty prompt.');
       }
-    } catch (e) {
-      console.error('Failed to generate external AI prompt', e);
+    } catch (error) {
+      console.error('Failed to generate external AI prompt', error);
       setExternalError('Failed to generate prompt from server.');
     } finally {
       setExternalLoading(false);
@@ -442,8 +414,8 @@ export default function AIAssistant() {
       await navigator.clipboard.writeText(externalPrompt);
       setPromptCopied(true);
       setTimeout(() => setPromptCopied(false), 2000);
-    } catch (e) {
-      console.error('Failed to copy external prompt', e);
+    } catch (error) {
+      console.error('Failed to copy external prompt', error);
       alert('Failed to copy prompt to clipboard.');
     }
   };
@@ -462,7 +434,7 @@ export default function AIAssistant() {
       if (!Array.isArray(toolCalls)) {
         throw new Error('Response is not a JSON array.');
       }
-    } catch (e) {
+    } catch (_error) {
       setExternalError(
         'Invalid JSON array provided. Please ensure the pasted AI response contains the requested tool-call array.'
       );
@@ -471,7 +443,7 @@ export default function AIAssistant() {
     }
 
     try {
-      const res = await fetch('/api/ai/manual/execute', {
+      const res = await apiFetch('/api/ai/manual/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -479,10 +451,6 @@ export default function AIAssistant() {
           canvas_state: buildCanvasStateSnapshot(useStore.getState())
         })
       });
-
-      if (!res.ok) {
-        throw new Error(`Server returned ${res.status}`);
-      }
 
       const data = await res.json();
       setExternalResults(data.execution_results || []);

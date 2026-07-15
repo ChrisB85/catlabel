@@ -59,7 +59,7 @@ The visual editor allows you to place text, barcodes, QR codes, icons, shapes, a
 *   **Z-Order & Grouping:** Use the toolbar to bring elements forward or backward. You can select multiple items (hold `Shift`) to group them together for moving and scaling.
 
 ### 2. Designing with HTML & CSS
-For complex layouts (like shipping labels or split columns), you can use the HTML mode. This bypasses the visual drag-and-drop elements and renders raw HTML onto the label.
+For complex layouts (like shipping labels or split columns), each label page can include a sanitized HTML/CSS background together with visual drag-and-drop elements. HTML and canvas elements are composited in the same page during preview and printing.
 
 **Auto-Scaling Text:** 
 If you wrap text in an `.auto-text` class inside a `.bound-box` container, CatLabel will calculate and apply the exact font size needed to maximize the text within that box. This prevents text from overflowing or being too small without requiring manual font-size guessing.
@@ -107,7 +107,7 @@ CatLabel includes a chat interface that can write HTML layouts and execute tool 
 ### 6. Project Management
 The sidebar contains a file tree to save your designs.
 *   You can create folders and drag-and-drop projects between them.
-*   Projects save the canvas dimensions, elements, HTML, and your currently loaded batch data.
+*   Projects save the canvas dimensions, per-page HTML/template layouts, page-indexed elements, and your currently loaded batch data.
 *   You can export individual projects or entire folders as JSON files to back them up or share them.
 
 ### 7. Printer Settings (Hardware Overrides)
@@ -130,9 +130,9 @@ In the **Canvas & Printer** tab, you can override default hardware behaviors:
 ## Architecture
 
 *   **Backend (`catlabel/`):** A FastAPI server with separate device policy, printing runtime, stateless protocol encoding, and Bluetooth transport layers. Generic printer metadata is a reproducible snapshot pinned to TiMini-Print v0.7.3.
-*   **Frontend (`frontend/`):** A React application using Zustand for state management and Konva.js for the interactive canvas.
+*   **Frontend (`frontend/`):** A React application using Zustand for state management and Konva.js for the interactive canvas. Pages are represented by the union of page-indexed canvas elements and `pageLayouts`; rendering never inherits content from another page.
 
-See the [backend architecture](docs/architecture.md) and [upstream synchronization ledger](docs/upstream-sync.md) for layer ownership, imported changes, and intentionally deferred printer families.
+See the [backend architecture](docs/architecture.md), [frontend architecture](docs/frontend-architecture.md), and [upstream synchronization ledger](docs/upstream-sync.md) for layer ownership, document invariants, imported changes, and intentionally deferred printer families.
 
 ---
 

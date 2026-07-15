@@ -43,6 +43,23 @@ const rootLogoAsset = () => ({
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react(), rootLogoAsset()],
+  test: {
+    environment: 'jsdom',
+    restoreMocks: true
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const moduleId = id.replaceAll('\\', '/');
+          if (/\/node_modules\/(react|react-dom|scheduler)\//.test(moduleId)) return 'react-vendor';
+          if (/\/node_modules\/(konva|react-konva)\//.test(moduleId)) return 'canvas-vendor';
+          if (/\/node_modules\/(zustand|dompurify|html-to-image)\//.test(moduleId)) return 'editor-vendor';
+          return undefined;
+        }
+      }
+    }
+  },
   server: {
     port: 5173,
     host: true,

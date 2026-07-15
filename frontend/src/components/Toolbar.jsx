@@ -1,19 +1,22 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../store';
+import { useShallow } from 'zustand/react/shallow';
+import { apiFetch } from '../utils/apiClient';
 import {
   Type, Calendar, Smile, Image as ImageIcon,
   Barcode, QrCode, Code, FileText, Wand2, ChevronDown, Package, Trash2,
   ZoomIn, ZoomOut, MoveUp, MoveDown, Combine, Ungroup, Shapes, Square, Circle, Minus,
-  Undo2, Redo2
+  Undo2, Redo2, PanelRight
 } from 'lucide-react';
 
-import IconPicker from './IconPicker';
-import HtmlPickerModal from './HtmlPickerModal';
-import DateToolModal from './DateToolModal';
-import TemplateWizardModal from './TemplateWizardModal';
+const IconPicker = React.lazy(() => import('./IconPicker'));
+const HtmlPickerModal = React.lazy(() => import('./HtmlPickerModal'));
+const DateToolModal = React.lazy(() => import('./DateToolModal'));
+const TemplateWizardModal = React.lazy(() => import('./TemplateWizardModal'));
 
 const ToolButton = ({ icon: Icon, label, onClick, component: Component = 'button', active = false, children, disabled = false, className = '' }) => (
   <Component
+    {...(Component === 'button' ? { type: 'button', disabled, 'aria-label': label } : {})}
     onClick={disabled ? undefined : onClick}
     className={`relative group p-2.5 rounded transition-colors flex items-center justify-center ${className} ${
       disabled
@@ -25,7 +28,7 @@ const ToolButton = ({ icon: Icon, label, onClick, component: Component = 'button
   >
     <Icon size={18} strokeWidth={2} />
     {children}
-    <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-[10px] uppercase font-bold tracking-widest px-2.5 py-1.5 rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-[60] shadow-md">
+    <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 text-[10px] uppercase font-bold tracking-widest px-2.5 py-1.5 rounded opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-[60] shadow-md">
       {label}
     </div>
   </Component>
@@ -48,8 +51,16 @@ export default function Toolbar() {
     undo,
     redo,
     canUndo,
-    canRedo
-  } = useStore();
+    canRedo,
+    toggleProperties
+  } = useStore(useShallow((state) => ({
+    addItem: state.addItem, clearCanvas: state.clearCanvas, canvasWidth: state.canvasWidth,
+    canvasHeight: state.canvasHeight, zoomScale: state.zoomScale, setZoomScale: state.setZoomScale,
+    selectedId: state.selectedId, selectedIds: state.selectedIds, moveItemZ: state.moveItemZ,
+    groupSelected: state.groupSelected, ungroupSelected: state.ungroupSelected, items: state.items,
+    undo: state.undo, redo: state.redo, canUndo: state.canUndo, canRedo: state.canRedo,
+    toggleProperties: state.toggleProperties
+  })));
 
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [showHtmlPicker, setShowHtmlPicker] = useState(false);
@@ -65,10 +76,13 @@ export default function Toolbar() {
   const selectedItem = items.find((item) => item.id === selectedId);
 
   useEffect(() => {
-    fetch('/api/templates')
+    apiFetch('/api/templates')
       .then((res) => res.json())
       .then((data) => setTemplates(data.templates || []))
-      .catch((err) => console.error('Failed to fetch templates:', err));
+      .catch((err) => {
+        console.error('Failed to fetch templates:', err);
+        useStore.setState({ apiError: err.message || 'Failed to load label templates.' });
+      });
   }, []);
 
   useEffect(() => {
@@ -196,11 +210,10 @@ export default function Toolbar() {
     formData.append('file', file);
 
     try {
-      const res = await fetch('/api/pdf/convert', {
+      const res = await apiFetch('/api/pdf/convert', {
         method: 'POST',
         body: formData
       });
-      if (!res.ok) throw new Error('PDF processing failed');
       const data = await res.json();
 
       let currentY = 0;
@@ -372,13 +385,16 @@ export default function Toolbar() {
       {/* Group: Actions */}
       <div className="flex items-center gap-1">
         <ToolButton icon={Trash2} label="Clear Canvas" onClick={clearCanvas} />
+        <ToolButton icon={PanelRight} label="Toggle properties panel" onClick={toggleProperties} />
       </div>
 
       {/* Modals */}
-      {showIconPicker && <IconPicker onClose={() => setShowIconPicker(false)} onSelect={handleAddIcon} />}
-      {showHtmlPicker && <HtmlPickerModal onClose={() => setShowHtmlPicker(false)} onSelect={handleAddHtml} />}
-      {showDateModal && <DateToolModal onClose={() => setShowDateModal(false)} />}
-      {selectedWizard && <TemplateWizardModal template={selectedWizard} onClose={() => setSelectedWizard(null)} />}
+      <React.Suspense fallback={null}>
+        {showIconPicker && <IconPicker onClose={() => setShowIconPicker(false)} onSelect={handleAddIcon} />}
+        {showHtmlPicker && <HtmlPickerModal onClose={() => setShowHtmlPicker(false)} onSelect={handleAddHtml} />}
+        {showDateModal && <DateToolModal onClose={() => setShowDateModal(false)} />}
+        {selectedWizard && <TemplateWizardModal template={selectedWizard} onClose={() => setSelectedWizard(null)} />}
+      </React.Suspense>
     </div>
   );
 }

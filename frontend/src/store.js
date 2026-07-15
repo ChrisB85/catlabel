@@ -1,8 +1,19 @@
 import { create } from 'zustand';
-import { toPng } from 'html-to-image';
 import { calculateAutoFitItem } from './utils/rendering';
-import { apiErrorFromResponse, describePrintError } from './utils/apiErrors';
+import { describePrintError } from './utils/apiErrors';
+import { apiFetch, apiJson, isArrayPayload, isObjectPayload } from './utils/apiClient';
 import { buildLabelTemplateMarkup } from './components/templateStyles';
+import { normalizePageIndex } from './utils/canvasPages';
+import {
+  buildBatchMatrix,
+  buildBatchSequence,
+  getPrintJobCount,
+  getRenderPixelCount,
+  MAX_BATCH_RECORDS,
+  MAX_PRINT_COPIES,
+  MAX_PRINT_JOBS,
+  MAX_RENDER_PIXELS
+} from './utils/batchData';
 
 const recalcAutoFit = (items, batchRecords, cw, ch) => {
   let changed = false;
@@ -24,8 +35,31 @@ const recalcAutoFit = (items, batchRecords, cw, ch) => {
 const buildTemplateHtml = (templateId, params = {}, width = 384, height = 384) =>
   buildLabelTemplateMarkup({ template_id: templateId, params, width, height }, {});
 
+const errorMessage = (error, fallback) => error?.message || fallback;
+
+let printerProfileRequestId = 0;
+
+const scaleItemForDpi = (item, scale) => {
+  const scalableKeys = [
+    'x', 'y', 'width', 'height', 'size', 'padding', 'border_thickness', 'strokeWidth',
+    'icon_size', 'icon_x', 'icon_y', 'text_x', 'text_y'
+  ];
+  const nextItem = { ...item };
+  scalableKeys.forEach((key) => {
+    if (typeof nextItem[key] === 'number' && Number.isFinite(nextItem[key])) {
+      nextItem[key] = nextItem[key] * scale;
+    }
+  });
+  if (Array.isArray(item.children)) {
+    nextItem.children = item.children.map((child) => scaleItemForDpi(child, scale));
+  }
+  return nextItem;
+};
+
 const normalizeCanvasState = (canvasState = {}) => {
-  const items = Array.isArray(canvasState.items) ? canvasState.items : [];
+  const items = Array.isArray(canvasState.items)
+    ? canvasState.items.filter((item) => item && typeof item === 'object')
+    : [];
   let pageLayouts = canvasState.pageLayouts;
 
   // Migration from old single-template/HTML structure
@@ -65,12 +99,91 @@ const normalizeCanvasState = (canvasState = {}) => {
   };
 };
 
+const buildCanvasDocumentPatch = (canvasState = {}, currentState = {}) => {
+  const normalized = normalizeCanvasState(canvasState);
+  const width = Math.min(20_000, Math.max(1, Number(normalized.width ?? currentState.canvasWidth) || 384));
+  const height = Math.min(20_000, Math.max(1, Number(normalized.height ?? currentState.canvasHeight) || 384));
+  const normalizedBatchRecords = Array.isArray(normalized.batchRecords)
+    ? normalized.batchRecords.filter((record) => record && typeof record === 'object').slice(0, MAX_BATCH_RECORDS)
+    : [];
+  const batchRecords = normalizedBatchRecords.length ? normalizedBatchRecords : [{}];
+  const rawPageLayouts = (Array.isArray(normalized.pageLayouts) && normalized.pageLayouts.length
+    ? normalized.pageLayouts
+    : [{ pageIndex: 0, htmlContent: '', activeTemplate: null }]
+  ).filter((layout) => layout && typeof layout === 'object').map((layout) => {
+    const pageIndex = normalizePageIndex(layout?.pageIndex);
+    if (!layout?.activeTemplate?.id) {
+      return {
+        ...layout,
+        pageIndex,
+        htmlContent: typeof layout.htmlContent === 'string' ? layout.htmlContent : '',
+        activeTemplate: null
+      };
+    }
+
+    return {
+      ...layout,
+      pageIndex,
+      htmlContent: buildTemplateHtml(
+        layout.activeTemplate.id,
+        layout.activeTemplate.params || {},
+        width,
+        height
+      )
+    };
+  });
+  const pageLayouts = [...new Map(rawPageLayouts.map((layout) => [layout.pageIndex, layout])).values()];
+  if (pageLayouts.length === 0) pageLayouts.push({ pageIndex: 0, htmlContent: '', activeTemplate: null });
+  const items = (normalized.items || []).map((item, index) => ({
+    ...item,
+    id: String(item.id ?? `recovered-${index}`),
+    pageIndex: normalizePageIndex(item.pageIndex)
+  }));
+  const allowedBorders = new Set(['none', 'box', 'top', 'bottom', 'cut_line']);
+
+  return {
+    canvasWidth: width,
+    canvasHeight: height,
+    canvasBorder: allowedBorders.has(normalized.canvasBorder) ? normalized.canvasBorder : 'none',
+    canvasBorderThickness: Math.max(1, Number(normalized.canvasBorderThickness) || 4),
+    splitMode: Boolean(normalized.splitMode),
+    pageLayouts,
+    isRotated: Boolean(normalized.isRotated),
+    batchRecords,
+    printCopies: Math.min(MAX_PRINT_COPIES, Math.max(1, Number(normalized.printCopies) || 1)),
+    currentPage: normalizePageIndex(normalized.currentPage),
+    items: recalcAutoFit(items, batchRecords, width, height),
+    selectedId: null,
+    selectedIds: [],
+    selectedPagesForPrint: []
+  };
+};
+
 const withHistory = (config) => {
   let historyTimeout;
   let storedPrevState = null;
 
   return (set, get, api) => {
-    const historySet = (args, replace) => {
+    const historySet = (args, replace, options = {}) => {
+      if (options.history === 'reset') {
+        clearTimeout(historyTimeout);
+        storedPrevState = null;
+        set(args, replace);
+        set({
+          history: [],
+          historyIndex: -1,
+          canUndo: false,
+          canRedo: false,
+          _isUndoRedo: false
+        });
+        return;
+      }
+
+      if (options.history === 'skip') {
+        set(args, replace);
+        return;
+      }
+
       if (!storedPrevState) {
         storedPrevState = get();
       }
@@ -88,7 +201,17 @@ const withHistory = (config) => {
       clearTimeout(historyTimeout);
       historyTimeout = setTimeout(() => {
         const finalState = get();
-        const relevantKeys = ['items', 'canvasWidth', 'canvasHeight', 'isRotated', 'splitMode', 'canvasBorder', 'canvasBorderThickness', 'pageLayouts'];
+        const relevantKeys = [
+          'items',
+          'canvasWidth',
+          'canvasHeight',
+          'isRotated',
+          'splitMode',
+          'canvasBorder',
+          'canvasBorderThickness',
+          'pageLayouts',
+          'batchRecords'
+        ];
         let changed = false;
 
         for (const key of relevantKeys) {
@@ -194,6 +317,8 @@ export const useStore = create(withHistory((set, get) => ({
   pageLayouts: [{ pageIndex: 0, htmlContent: '', activeTemplate: null }],
   showAiConfig: false,
   setShowAiConfig: (val) => set({ showAiConfig: val }),
+  apiError: '',
+  clearApiError: () => set({ apiError: '' }),
   
   setHtmlContent: (val) => set((state) => {
     const layouts = [...state.pageLayouts];
@@ -242,7 +367,10 @@ export const useStore = create(withHistory((set, get) => ({
   manualPrinters: (() => {
     if (typeof window === 'undefined') return [];
     try {
-      return JSON.parse(window.localStorage.getItem('catlabel_manual_printers') || '[]');
+      const saved = JSON.parse(window.localStorage.getItem('catlabel_manual_printers') || '[]');
+      return Array.isArray(saved)
+        ? saved.filter((printer) => printer && typeof printer === 'object' && typeof printer.address === 'string').slice(0, 100)
+        : [];
     } catch (e) {
       console.error('Failed to load manual printers', e);
       return [];
@@ -267,7 +395,6 @@ export const useStore = create(withHistory((set, get) => ({
   theme: 'auto',
   dither: true,
   setDither: (val) => set({ dither: val }),
-  snapLines: [],
   fonts: [],
   labelPresets: [],
   currentDpi: 203,
@@ -390,6 +517,31 @@ export const useStore = create(withHistory((set, get) => ({
     ).sort((a, b) => a - b);
     if (normalizedPageIndices.length === 0) return;
 
+    const printJobCount = getPrintJobCount({
+      records: state.batchRecords?.length || 1,
+      copies: state.printCopies || 1,
+      pages: normalizedPageIndices.length
+    });
+    if (printJobCount > MAX_PRINT_JOBS) {
+      alert(
+        `This print request would create ${printJobCount.toLocaleString()} labels. `
+        + `Reduce pages, records, or copies to ${MAX_PRINT_JOBS.toLocaleString()} jobs or fewer.`
+      );
+      return;
+    }
+    const renderPixels = getRenderPixelCount({
+      width: state.canvasWidth,
+      height: state.canvasHeight,
+      jobs: printJobCount
+    });
+    if (renderPixels > MAX_RENDER_PIXELS) {
+      alert(
+        'This print request is too large to render safely in memory. '
+        + 'Reduce the label dimensions, pages, records, or copies and try again.'
+      );
+      return;
+    }
+
     let itemsToPrint = state.items;
     let finalBatchRecords = state.batchRecords || [{}];
     let finalPageIndices = normalizedPageIndices;
@@ -421,13 +573,19 @@ export const useStore = create(withHistory((set, get) => ({
     });
   },
 
-  onLocalRenderComplete: async (images) => {
+  onLocalRenderComplete: async (images, renderError = null) => {
     const state = get();
     const pendingPrintJob = state.pendingPrintJob;
 
     set({ isPreparingForPrint: false });
 
     if (!pendingPrintJob) {
+      return;
+    }
+
+    if (renderError) {
+      set({ pendingPrintJob: null });
+      alert(`Failed to prepare labels for printing:\n\n${renderError.message || renderError}`);
       return;
     }
 
@@ -439,7 +597,7 @@ export const useStore = create(withHistory((set, get) => ({
     set({ isPrinting: true });
 
     try {
-      const printRes = await fetch(`/api/print/images`, {
+      await apiFetch(`/api/print/images`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -449,11 +607,7 @@ export const useStore = create(withHistory((set, get) => ({
           is_rotated: pendingPrintJob.canvasState.isRotated || false,
           dither: pendingPrintJob.dither
         })
-      });
-
-      if (!printRes.ok) {
-        throw await apiErrorFromResponse(printRes, 'Print failed');
-      }
+      }, { timeoutMs: 120_000, fallback: 'Print failed' });
     } catch (e) {
       console.error(e);
       const message = await describePrintError(e);
@@ -465,6 +619,8 @@ export const useStore = create(withHistory((set, get) => ({
 
   isSidebarCollapsed: false,
   toggleSidebar: () => set((state) => ({ isSidebarCollapsed: !state.isSidebarCollapsed })),
+  isPropertiesOpen: true,
+  toggleProperties: () => set((state) => ({ isPropertiesOpen: !state.isPropertiesOpen })),
   
   addresses: [],
   settings: { paper_width_mm: 58.0, print_width_mm: 48.0, default_dpi: 203, speed: 0, energy: 0, feed_lines: 50, default_font: 'RobotoCondensed.ttf', intended_media_type: 'unknown' },
@@ -509,10 +665,18 @@ export const useStore = create(withHistory((set, get) => ({
   aiInput: '',
   aiConvId: null,
   aiSessionUsage: { tokens: 0, promptTokens: 0, completionTokens: 0, cost: 0 },
-  setAiMessages: (msgs) => set({ aiMessages: msgs }),
   setAiInput: (input) => set({ aiInput: input }),
   setAiConvId: (id) => set({ aiConvId: id }),
-  setAiSessionUsage: (usage) => set({ aiSessionUsage: usage }),
+  setAiMessages: (messagesOrUpdater) => set((state) => ({
+    aiMessages: typeof messagesOrUpdater === 'function'
+      ? messagesOrUpdater(state.aiMessages)
+      : messagesOrUpdater
+  })),
+  setAiSessionUsage: (usageOrUpdater) => set((state) => ({
+    aiSessionUsage: typeof usageOrUpdater === 'function'
+      ? usageOrUpdater(state.aiSessionUsage)
+      : usageOrUpdater
+  })),
   aiMode: 'live',
   setAiMode: (val) => set({ aiMode: val }),
   aiExternalIntent: '',
@@ -549,68 +713,37 @@ export const useStore = create(withHistory((set, get) => ({
 
   setBatchRecords: (records) => set((state) => {
     const validRecords = Array.isArray(records) && records.length ? records : [{}];
-    return {
-      batchRecords: validRecords,
-      items: recalcAutoFit(state.items, validRecords, state.canvasWidth, state.canvasHeight)
-    };
-  }),
-  generateBatchMatrix: (matrixDef) => set((state) => {
-    const keys = Object.keys(matrixDef || {});
-    if (keys.length === 0) {
-      return {};
+    if (validRecords.length > MAX_BATCH_RECORDS) {
+      return {
+        batchGenerationError: `Batch data is limited to ${MAX_BATCH_RECORDS.toLocaleString()} records.`
+      };
     }
-
-    const parsedArrays = keys.map((key) => {
-      const values = String(matrixDef[key] || '')
-        .split(',')
-        .map((value) => value.trim())
-        .filter(Boolean);
-      return values.length > 0 ? values : [''];
-    });
-
-    const combinations = parsedArrays.reduce(
-      (accumulator, values) =>
-        accumulator.flatMap((recordPrefix) =>
-          values.map((value) => [...recordPrefix, value])
-        ),
-      [[]]
-    );
-
-    const records = combinations.map((combo) => {
-      const record = {};
-      keys.forEach((key, index) => {
-        record[key] = combo[index];
-      });
-      return record;
-    });
-
-    const validRecords = records.length ? records : [{}];
     return {
       batchRecords: validRecords,
+      batchGenerationError: '',
       items: recalcAutoFit(state.items, validRecords, state.canvasWidth, state.canvasHeight)
     };
   }),
-  generateBatchSequence: (seqDef) => set((state) => {
-    const { varName, start, end, prefix = '', suffix = '', padding = 0 } = seqDef || {};
-    if (!varName) return {};
-
-    const s = parseInt(start, 10) || 0;
-    const e = parseInt(end, 10) || 0;
-    const pad = Math.max(0, parseInt(padding, 10) || 0);
-    const step = s <= e ? 1 : -1;
-
-    const records = [];
-    for (let i = s; step > 0 ? i <= e : i >= e; i += step) {
-      const numStr = String(i).padStart(pad, '0');
-      records.push({ [varName]: `${prefix}${numStr}${suffix}` });
+  batchGenerationError: '',
+  clearBatchGenerationError: () => set({ batchGenerationError: '' }),
+  generateBatchMatrix: (matrixDef) => {
+    try {
+      get().setBatchRecords(buildBatchMatrix(matrixDef));
+      return true;
+    } catch (error) {
+      set({ batchGenerationError: error.message });
+      return false;
     }
-
-    const validRecords = records.length ? records : [{}];
-    return {
-      batchRecords: validRecords,
-      items: recalcAutoFit(state.items, validRecords, state.canvasWidth, state.canvasHeight)
-    };
-  }),
+  },
+  generateBatchSequence: (seqDef) => {
+    try {
+      get().setBatchRecords(buildBatchSequence(seqDef));
+      return true;
+    } catch (error) {
+      set({ batchGenerationError: error.message });
+      return false;
+    }
+  },
   updateBatchRecord: (index, newRecord) => set((state) => {
     const newRecords = [...state.batchRecords];
     newRecords[index] = newRecord;
@@ -620,9 +753,15 @@ export const useStore = create(withHistory((set, get) => ({
     };
   }),
   addBatchRecord: (record = {}) => set((state) => {
+    if (state.batchRecords.length >= MAX_BATCH_RECORDS) {
+      return {
+        batchGenerationError: `Batch data is limited to ${MAX_BATCH_RECORDS.toLocaleString()} records.`
+      };
+    }
     const newRecords = [...state.batchRecords, record];
     return {
       batchRecords: newRecords,
+      batchGenerationError: '',
       items: recalcAutoFit(state.items, newRecords, state.canvasWidth, state.canvasHeight)
     };
   }),
@@ -635,13 +774,15 @@ export const useStore = create(withHistory((set, get) => ({
     };
   }),
   setPrintCopies: (n) => set({
-    printCopies: Math.max(1, Number(n) || 1)
+    printCopies: Math.min(MAX_PRINT_COPIES, Math.max(1, Number(n) || 1))
   }),
 
   fetchPresets: async () => {
     try {
-      const res = await fetch('/api/presets');
-      let data = await res.json();
+      let data = await apiJson('/api/presets', {}, {
+        validate: isArrayPayload,
+        validationMessage: 'Preset data is malformed.'
+      });
 
       const standard48 = data.find((p) => p.name.includes('Standard Square (48x48mm)'));
       const a6Shipping = data.find((p) => p.name.includes('A6 Shipping'));
@@ -654,26 +795,26 @@ export const useStore = create(withHistory((set, get) => ({
       set({ labelPresets: data });
     } catch (e) {
       console.error("Failed to fetch presets", e);
+      set({ apiError: errorMessage(e, 'Failed to load presets.') });
     }
   },
 
   fetchProjects: async () => {
     try {
-      const [projRes, catRes] = await Promise.all([
-        fetch('/api/projects'),
-        fetch('/api/categories')
+      const [projects, categories] = await Promise.all([
+        apiJson('/api/projects', {}, { validate: isArrayPayload, validationMessage: 'Project data is malformed.' }),
+        apiJson('/api/categories', {}, { validate: isArrayPayload, validationMessage: 'Category data is malformed.' })
       ]);
-      const projects = await projRes.json();
-      const categories = await catRes.json();
       set({ projects, categories });
     } catch (e) {
       console.error("Failed to fetch projects/categories", e);
+      set({ apiError: errorMessage(e, 'Failed to load projects and folders.') });
     }
   },
 
   createCategory: async (name, parentId = null) => {
     try {
-      await fetch('/api/categories', {
+      await apiFetch('/api/categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, parent_id: parentId })
@@ -681,12 +822,13 @@ export const useStore = create(withHistory((set, get) => ({
       useStore.getState().fetchProjects();
     } catch (e) {
       console.error(e);
+      set({ apiError: errorMessage(e, 'Failed to create the folder.') });
     }
   },
 
   updateCategory: async (id, name = undefined, parentId = undefined) => {
     try {
-      await fetch(`/api/categories/${id}`, {
+      await apiFetch(`/api/categories/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, parent_id: parentId })
@@ -694,16 +836,18 @@ export const useStore = create(withHistory((set, get) => ({
       useStore.getState().fetchProjects();
     } catch (e) {
       console.error(e);
+      set({ apiError: errorMessage(e, 'Failed to update the folder.') });
     }
   },
 
   deleteCategory: async (id) => {
     if (!window.confirm("Delete this folder AND all its contents recursively?")) return;
     try {
-      await fetch(`/api/categories/${id}`, { method: 'DELETE' });
+      await apiFetch(`/api/categories/${id}`, { method: 'DELETE' });
       useStore.getState().fetchProjects();
     } catch (e) {
       console.error(e);
+      set({ apiError: errorMessage(e, 'Failed to delete the folder.') });
     }
   },
 
@@ -714,7 +858,7 @@ export const useStore = create(withHistory((set, get) => ({
     const printCopies = state.printCopies || 1;
     
     try {
-      const res = await fetch('/api/projects', {
+      const res = await apiFetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -731,10 +875,12 @@ export const useStore = create(withHistory((set, get) => ({
         })
       });
       const data = await res.json();
+      if (!isObjectPayload(data) || data.id === undefined) throw new Error('The saved project response is malformed.');
       set({ currentProjectId: data.id });
       useStore.getState().fetchProjects();
     } catch (e) {
       console.error(e);
+      set({ apiError: errorMessage(e, 'Failed to save the project.') });
     }
   },
 
@@ -758,7 +904,7 @@ export const useStore = create(withHistory((set, get) => ({
     if (newCategoryId !== undefined) payload.category_id = newCategoryId;
 
     try {
-      await fetch(`/api/projects/${id}`, {
+      await apiFetch(`/api/projects/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -766,45 +912,39 @@ export const useStore = create(withHistory((set, get) => ({
       useStore.getState().fetchProjects();
     } catch (e) {
       console.error(e);
+      set({ apiError: errorMessage(e, 'Failed to update the project.') });
     }
   },
 
   deleteProject: async (id) => {
     if (!window.confirm("Are you sure you want to delete this project?")) return;
     try {
-      await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+      await apiFetch(`/api/projects/${id}`, { method: 'DELETE' });
       useStore.getState().fetchProjects();
       if (useStore.getState().currentProjectId === id) {
         set({ currentProjectId: null });
       }
     } catch (e) {
       console.error(e);
+      set({ apiError: errorMessage(e, 'Failed to delete the project.') });
     }
   },
 
+  hydrateCanvasState: (canvasState, options = {}) => set(
+    (state) => ({
+      ...buildCanvasDocumentPatch(canvasState, state),
+      ...(options.currentProjectId !== undefined
+        ? { currentProjectId: options.currentProjectId }
+        : {})
+    }),
+    false,
+    { history: options.resetHistory ? 'reset' : 'record' }
+  ),
+
   loadProject: (proj) => {
-    set({ currentProjectId: proj.id });
-    const s = normalizeCanvasState(proj.canvas_state || {});
-    const batchRecords = s.batchRecords || [{}];
-    set({
-      canvasWidth: s.width || 384,
-      canvasHeight: s.height || 384,
-      canvasBorder: s.canvasBorder || 'none',
-      canvasBorderThickness: s.canvasBorderThickness || 4,
-      splitMode: s.splitMode || false,
-      pageLayouts: s.pageLayouts || [{ pageIndex: 0, htmlContent: '', activeTemplate: null }],
-      isRotated: s.isRotated || false,
-      batchRecords,
-      printCopies: s.printCopies || 1,
-      currentPage: s.currentPage || 0,
-      items: recalcAutoFit(s.items || [], batchRecords, s.width || 384, s.height || 384),
-      selectedId: null,
-      selectedIds: [],
-      selectedPagesForPrint: [],
-      history: [],
-      historyIndex: -1,
-      canUndo: false,
-      canRedo: false
+    get().hydrateCanvasState(proj.canvas_state || {}, {
+      currentProjectId: proj.id,
+      resetHistory: true
     });
   },
 
@@ -815,7 +955,7 @@ export const useStore = create(withHistory((set, get) => ({
     const heightMm = parseFloat(state.getPxToMm(state.canvasHeight));
 
     try {
-      await fetch('/api/presets', {
+      await apiFetch('/api/presets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -832,6 +972,7 @@ export const useStore = create(withHistory((set, get) => ({
       await state.fetchPresets();
     } catch (e) {
       console.error("Failed to save preset", e);
+      set({ apiError: errorMessage(e, 'Failed to save the preset.') });
     }
   },
 
@@ -859,17 +1000,20 @@ export const useStore = create(withHistory((set, get) => ({
   
   fetchAddresses: async () => {
     try {
-      const res = await fetch('/api/addresses');
-      const data = await res.json();
+      const data = await apiJson('/api/addresses', {}, {
+        validate: isArrayPayload,
+        validationMessage: 'Address data is malformed.'
+      });
       set({ addresses: data });
     } catch (e) {
       console.error("Failed to fetch addresses", e);
+      set({ apiError: errorMessage(e, 'Failed to load addresses.') });
     }
   },
 
   saveAddress: async (addr) => {
     try {
-      await fetch('/api/addresses', {
+      await apiFetch('/api/addresses', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(addr)
@@ -877,44 +1021,58 @@ export const useStore = create(withHistory((set, get) => ({
       useStore.getState().fetchAddresses();
     } catch (e) {
       console.error("Failed to save address", e);
+      set({ apiError: errorMessage(e, 'Failed to save the address.') });
     }
   },
 
   deleteAddress: async (id) => {
     try {
-      await fetch(`/api/addresses/${id}`, { method: 'DELETE' });
+      await apiFetch(`/api/addresses/${id}`, { method: 'DELETE' });
       useStore.getState().fetchAddresses();
     } catch (e) {
       console.error("Failed to delete address", e);
+      set({ apiError: errorMessage(e, 'Failed to delete the address.') });
     }
   },
 
   fetchSettings: async () => {
     try {
-      const res = await fetch('/api/settings');
-      const data = await res.json();
+      const data = await apiJson('/api/settings', {}, {
+        validate: isObjectPayload,
+        validationMessage: 'Settings data is malformed.'
+      });
       set({ settings: data, settingsLoaded: true });
     } catch (e) {
       console.error("Failed to fetch settings", e);
+      set({ settingsLoaded: true, apiError: errorMessage(e, 'Failed to load settings.') });
     }
   },
 
   fetchFonts: async () => {
     try {
-      const res = await fetch('/api/fonts');
-      const data = await res.json();
+      const data = await apiJson('/api/fonts', {}, {
+        validate: isArrayPayload,
+        validationMessage: 'Font data is malformed.'
+      });
       set({ fonts: data });
-      
+
+      const oldStyle = document.getElementById('catlabel-uploaded-fonts');
+      oldStyle?.remove();
       const style = document.createElement('style');
+      style.id = 'catlabel-uploaded-fonts';
       let css = '';
       data.forEach(font => {
-        const fontName = font.name.split('.')[0];
-        css += `@font-face { font-family: '${fontName}'; src: url('/${font.file_path}'); }\n`;
+        if (!font || typeof font.name !== 'string' || typeof font.file_path !== 'string') return;
+        const fontName = font.name.split('.')[0].replace(/[^\w -]/g, '').trim();
+        const filePath = font.file_path.replace(/\\/g, '/').replace(/^\/+/, '');
+        if (!fontName || filePath.includes('..') || /["'()\r\n]/.test(filePath)) return;
+        css += `@font-face { font-family: '${fontName}'; src: url('/${encodeURI(filePath)}'); }\n`;
       });
       style.appendChild(document.createTextNode(css));
       document.head.appendChild(style);
     } catch (e) {
       console.error("Failed to fetch fonts", e);
+      set({ apiError: errorMessage(e, 'Failed to load fonts.') });
     }
   },
 
@@ -922,61 +1080,83 @@ export const useStore = create(withHistory((set, get) => ({
     const formData = new FormData();
     formData.append("file", file);
     try {
-      const res = await fetch('/api/fonts', {
+      await apiFetch('/api/fonts', {
         method: 'POST',
         body: formData
       });
-      if (!res.ok) throw new Error("Failed to upload font");
       await get().fetchFonts();
     } catch (e) {
       console.error("Failed to upload font", e);
-      alert("Failed to upload font file.");
+      set({ apiError: errorMessage(e, 'Failed to upload the font file.') });
     }
   },
 
-  setIsRotated: (val) => set((state) => {
-    if (val !== state.isRotated) {
-      const nextCanvasWidth = state.canvasHeight;
-      const nextCanvasHeight = state.canvasWidth;
-
-      return {
-        isRotated: val,
-        canvasWidth: nextCanvasWidth,
-        canvasHeight: nextCanvasHeight,
-        pageLayouts: state.pageLayouts.map(l => l.activeTemplate ? {
-          ...l,
-          htmlContent: buildTemplateHtml(l.activeTemplate.id, l.activeTemplate.params, nextCanvasWidth, nextCanvasHeight)
-        } : l),
-        items: recalcAutoFit(state.items, state.batchRecords, nextCanvasWidth, nextCanvasHeight)
-      };
-    }
-    return { isRotated: val };
-  }),
+  setIsRotated: (val) => {
+    const state = get();
+    const nextRotation = Boolean(val);
+    if (nextRotation === state.isRotated) return;
+    state.setCanvasGeometry(state.canvasHeight, state.canvasWidth, nextRotation);
+  },
 
   setCanvasBorder: (val) => set({ canvasBorder: val }),
   setCanvasBorderThickness: (val) => set({ canvasBorderThickness: val }),
   setSplitMode: (val) => set({ splitMode: val }),
   setTheme: (theme) => set({ theme }),
-  setSnapLines: (lines) => set({ snapLines: lines }),
   setSettings: (settings) => set({ settings }),
   
   updateSettingsAPI: async (newSettings) => {
-    set({ settings: newSettings });
+    const previous = get();
+    const rollback = {
+      settings: previous.settings,
+      currentDpi: previous.currentDpi,
+      canvasWidth: previous.canvasWidth,
+      canvasHeight: previous.canvasHeight,
+      items: previous.items,
+      pageLayouts: previous.pageLayouts
+    };
+    const requestedDpi = Number(newSettings?.default_dpi);
+    const currentDpi = previous.currentDpi || previous.settings?.default_dpi || 203;
+    const shouldScaleForDpi = !previous.selectedPrinter
+      && Number.isFinite(requestedDpi)
+      && requestedDpi > 0
+      && Math.abs(requestedDpi - currentDpi) > 0.001;
+
+    if (shouldScaleForDpi) {
+      const scale = requestedDpi / currentDpi;
+      const nextWidth = Math.max(1, Math.round(previous.canvasWidth * scale));
+      const nextHeight = Math.max(1, Math.round(previous.canvasHeight * scale));
+      set({
+        settings: newSettings,
+        currentDpi: requestedDpi,
+        canvasWidth: nextWidth,
+        canvasHeight: nextHeight,
+        items: recalcAutoFit(previous.items.map((item) => scaleItemForDpi(item, scale)), previous.batchRecords, nextWidth, nextHeight),
+        pageLayouts: previous.pageLayouts.map((layout) => layout.activeTemplate ? {
+          ...layout,
+          htmlContent: buildTemplateHtml(layout.activeTemplate.id, layout.activeTemplate.params, nextWidth, nextHeight)
+        } : layout)
+      });
+    } else {
+      set({ settings: newSettings });
+    }
     try {
-      await fetch('/api/settings', {
+      await apiFetch('/api/settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSettings)
       });
     } catch (e) {
       console.error("Failed to save settings", e);
+      set({ ...rollback, apiError: errorMessage(e, 'Failed to save settings.') });
     }
   },
   
   setSelectedPrinter: async (mac, info) => {
+    const requestId = ++printerProfileRequestId;
     const currentState = get();
     let newW = currentState.canvasWidth;
     let newH = currentState.canvasHeight;
+    let nextItems = currentState.items;
     let rot = currentState.isRotated;
     let border = currentState.canvasBorder;
 
@@ -987,6 +1167,14 @@ export const useStore = create(withHistory((set, get) => ({
     if (info) {
       const isNewPrinter = currentState.selectedPrinterInfo?.address !== mac;
       const isPreCutMedia = info.media_type === 'pre-cut';
+      const previousDpi = currentState.currentDpi || currentState.settings?.default_dpi || 203;
+      const dpiScale = activeDpi / previousDpi;
+
+      if (Math.abs(dpiScale - 1) > 0.001) {
+        newW = Math.max(1, Math.round(currentState.canvasWidth * dpiScale));
+        newH = Math.max(1, Math.round(currentState.canvasHeight * dpiScale));
+        nextItems = currentState.items.map((item) => scaleItemForDpi(item, dpiScale));
+      }
 
       if (isNewPrinter) {
         if (isPreCutMedia) {
@@ -1008,10 +1196,10 @@ export const useStore = create(withHistory((set, get) => ({
           border = 'none';
         } else {
           const hardwareWidth = info.width_px || 384;
-          const currentPrintHeadDimension = currentState.isRotated ? currentState.canvasHeight : currentState.canvasWidth;
+          const currentPrintHeadDimension = currentState.isRotated ? newH : newW;
 
           if (currentPrintHeadDimension <= hardwareWidth) {
-            console.log("Canvas is safe for this printer. Preserving user's preset.");
+            // Keep the current physical dimensions after the DPI conversion above.
           } else if (hardwareWidth === 384) {
             newW = hardwareWidth;
             newH = hardwareWidth;
@@ -1038,6 +1226,7 @@ export const useStore = create(withHistory((set, get) => ({
       canvasHeight: newH,
       isRotated: rot,
       canvasBorder: border,
+      items: recalcAutoFit(nextItems, currentState.batchRecords, newW, newH),
       pageLayouts: currentState.pageLayouts.map(l => l.activeTemplate ? {
         ...l,
         htmlContent: buildTemplateHtml(l.activeTemplate.id, l.activeTemplate.params, newW, newH)
@@ -1050,12 +1239,9 @@ export const useStore = create(withHistory((set, get) => ({
     }
 
     try {
-      const res = await fetch(`/api/printers/${mac}/profile`);
-      if (!res.ok) {
-        throw new Error(`Failed to fetch printer profile (${res.status})`);
-      }
-
+      const res = await apiFetch(`/api/printers/${mac}/profile`);
       let profile = (await res.json()) || {};
+      if (requestId !== printerProfileRequestId || get().selectedPrinter !== mac) return;
       const caps = info?.capabilities || {};
 
       // =========================================================================
@@ -1093,39 +1279,38 @@ export const useStore = create(withHistory((set, get) => ({
 
           if (bestMatch) {
             try {
-              const manRes = await fetch(`/api/printers/${bestMatch.address}/profile`);
-              if (manRes.ok) {
-                const manProfile = (await manRes.json()) || {};
-                const migratedSpeed = Number(manProfile?.speed ?? 0);
-                const migratedEnergy = Number(manProfile?.energy ?? 0);
-                const migratedFeedLines = Number(manProfile?.feed_lines ?? 50);
+              const manRes = await apiFetch(`/api/printers/${bestMatch.address}/profile`);
+              const manProfile = (await manRes.json()) || {};
+              if (requestId !== printerProfileRequestId || get().selectedPrinter !== mac) return;
+              const migratedSpeed = Number(manProfile?.speed ?? 0);
+              const migratedEnergy = Number(manProfile?.energy ?? 0);
+              const migratedFeedLines = Number(manProfile?.feed_lines ?? 50);
 
-                const migratedPaperMode = manProfile?.paper_mode || null;
-                const hasCustomSettings =
-                  migratedSpeed > 0 ||
-                  migratedEnergy > 0 ||
-                  migratedFeedLines !== 50 ||
-                  !!migratedPaperMode;
+              const migratedPaperMode = manProfile?.paper_mode || null;
+              const hasCustomSettings =
+                migratedSpeed > 0 ||
+                migratedEnergy > 0 ||
+                migratedFeedLines !== 50 ||
+                !!migratedPaperMode;
 
-                if (hasCustomSettings) {
-                  profile = {
-                    ...profile,
-                    speed: migratedSpeed > 0 ? migratedSpeed : profile?.speed,
-                    energy: migratedEnergy > 0 ? migratedEnergy : profile?.energy,
-                    feed_lines: migratedFeedLines !== 50 ? migratedFeedLines : profile?.feed_lines,
-                    paper_mode: migratedPaperMode || profile?.paper_mode
-                  };
+              if (hasCustomSettings) {
+                profile = {
+                  ...profile,
+                  speed: migratedSpeed > 0 ? migratedSpeed : profile?.speed,
+                  energy: migratedEnergy > 0 ? migratedEnergy : profile?.energy,
+                  feed_lines: migratedFeedLines !== 50 ? migratedFeedLines : profile?.feed_lines,
+                  paper_mode: migratedPaperMode || profile?.paper_mode
+                };
 
-                  await fetch(`/api/printers/${mac}/profile`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(profile)
-                  });
+                await apiFetch(`/api/printers/${mac}/profile`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(profile)
+                });
 
-                  console.log(
-                    `[Profile Sync] Safely migrated settings from compatible offline profile (${bestMatch.name}) to physical device ${mac}.`
-                  );
-                }
+                console.log(
+                  `[Profile Sync] Safely migrated settings from compatible offline profile (${bestMatch.name}) to physical device ${mac}.`
+                );
               }
             } catch (mergeError) {
               console.error("Failed to migrate offline profile settings", mergeError);
@@ -1170,6 +1355,7 @@ export const useStore = create(withHistory((set, get) => ({
         ? (supportedPaperValues.includes(profile?.paper_mode) ? profile.paper_mode : supportedPaperValues[0])
         : null;
 
+      if (requestId !== printerProfileRequestId || get().selectedPrinter !== mac) return;
       set({
         printerProfile: {
           ...profile,
@@ -1181,7 +1367,12 @@ export const useStore = create(withHistory((set, get) => ({
       });
     } catch (e) {
       console.error("Failed to fetch or merge printer profile", e);
-      set({ printerProfile: { speed: 0, energy: 0, feed_lines: 50, paper_mode: null } });
+      if (requestId === printerProfileRequestId && get().selectedPrinter === mac) {
+        set({
+          printerProfile: { speed: 0, energy: 0, feed_lines: 50, paper_mode: null },
+          apiError: errorMessage(e, 'Failed to load the printer profile.')
+        });
+      }
     }
   },
   
@@ -1202,19 +1393,22 @@ export const useStore = create(withHistory((set, get) => ({
     // We specifically omitted history wipes here so the user can Undo a canvas clear!
   }),
   
-  addItem: (item) => set((state) => ({
-    items: [
-      ...state.items,
-      item.pageIndex === undefined ? { ...item, pageIndex: state.currentPage } : item
-    ]
-  })),
+  addItem: (item) => set((state) => {
+    const nextItem = item.pageIndex === undefined ? { ...item, pageIndex: state.currentPage } : item;
+    return {
+      items: [...state.items, nextItem],
+      selectedId: nextItem.id,
+      selectedIds: [nextItem.id],
+      currentPage: normalizePageIndex(nextItem.pageIndex)
+    };
+  }),
   
   duplicateItem: (id, copies, gapMm) => set((state) => {
     const itemToClone = state.items.find(i => i.id === id);
     if (!itemToClone) return state;
     
     const newItems = [];
-    const gapPx = Math.round(gapMm * 8);
+    const gapPx = get().getMmToPx(gapMm);
     const numLines = itemToClone.text ? String(itemToClone.text).split('\n').length : 1;
     const pad = itemToClone.padding !== undefined ? Number(itemToClone.padding) : 0;
     const actualLineHeight = itemToClone.lineHeight ?? (numLines > 1 ? 1.15 : 1);
@@ -1492,13 +1686,19 @@ export const useStore = create(withHistory((set, get) => ({
     return { items: newItems };
   }),
   
-  setCanvasSize: (width, height) => set((state) => ({
-    canvasWidth: width,
-    canvasHeight: height,
-    pageLayouts: state.pageLayouts.map(l => l.activeTemplate ? {
-      ...l,
-      htmlContent: buildTemplateHtml(l.activeTemplate.id, l.activeTemplate.params, width, height)
-    } : l),
-    items: recalcAutoFit(state.items, state.batchRecords, width, height)
-  })),
+  setCanvasGeometry: (width, height, isRotated = get().isRotated) => set((state) => {
+    const nextWidth = Math.min(20_000, Math.max(1, Number(width) || 1));
+    const nextHeight = Math.min(20_000, Math.max(1, Number(height) || 1));
+    return {
+      canvasWidth: nextWidth,
+      canvasHeight: nextHeight,
+      isRotated: Boolean(isRotated),
+      pageLayouts: state.pageLayouts.map(l => l.activeTemplate ? {
+        ...l,
+        htmlContent: buildTemplateHtml(l.activeTemplate.id, l.activeTemplate.params, nextWidth, nextHeight)
+      } : l),
+      items: recalcAutoFit(state.items, state.batchRecords, nextWidth, nextHeight)
+    };
+  }),
+  setCanvasSize: (width, height) => get().setCanvasGeometry(width, height, get().isRotated),
 })));

@@ -1,21 +1,23 @@
 import React, { useState } from 'react';
 import { X, Code } from 'lucide-react';
+import { useDialogAccessibility } from '../utils/useDialogAccessibility';
 
 export default function HtmlPickerModal({ onClose, onSelect }) {
+  const dialogRef = useDialogAccessibility(onClose);
   const [content, setContent] = useState(
     `<div style="display:flex; flex-direction:column; width:100%; height:100%; text-align:center;">\n  <div style="flex:1; min-width:0; min-height:0; overflow:hidden;">\n    <div class="auto-text">\n      <h1>HELLO WORLD</h1>\n    </div>\n  </div>\n  <div style="flex:1; min-width:0; min-height:0; overflow:hidden;">\n    <div class="auto-text">\n      <p>Custom HTML</p>\n    </div>\n  </div>\n</div>`
   );
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white dark:bg-neutral-900 w-full max-w-2xl rounded-xl shadow-2xl flex flex-col border border-neutral-200 dark:border-neutral-800">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Insert HTML" tabIndex={-1} className="bg-white dark:bg-neutral-900 w-full max-w-2xl rounded-xl shadow-2xl flex flex-col border border-neutral-200 dark:border-neutral-800">
         
         <div className="flex items-center justify-between p-4 border-b border-neutral-100 dark:border-neutral-800">
           <div className="flex items-center gap-2">
             <Code className="text-blue-500" size={20} />
             <h3 className="font-serif text-lg dark:text-white">Create HTML Element</h3>
           </div>
-          <button onClick={onClose} className="p-2 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors">
+          <button onClick={onClose} aria-label="Close HTML dialog" className="p-2 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors">
             <X size={20} />
           </button>
         </div>

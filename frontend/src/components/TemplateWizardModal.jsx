@@ -2,13 +2,19 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Wand2, Database, AlertTriangle, LayoutTemplate, ChevronDown } from 'lucide-react';
 import { useStore } from '../store';
+import { useShallow } from 'zustand/react/shallow';
+import { useDialogAccessibility } from '../utils/useDialogAccessibility';
 import IconPicker from './IconPicker';
 import PresetPickerModal from './PresetPickerModal';
 
 export default function TemplateWizardModal({ template, onClose }) {
+  const dialogRef = useDialogAccessibility(onClose);
   const {
     canvasWidth, canvasHeight, setTemplateConfig, clearCanvas
-  } = useStore();
+  } = useStore(useShallow((state) => ({
+    canvasWidth: state.canvasWidth, canvasHeight: state.canvasHeight,
+    setTemplateConfig: state.setTemplateConfig, clearCanvas: state.clearCanvas
+  })));
   const [formData, setFormData] = useState({});
   const [batchMode, setBatchMode] = useState(false);
   const [pickerField, setPickerField] = useState(null);
@@ -48,13 +54,13 @@ export default function TemplateWizardModal({ template, onClose }) {
 
   const modalContent = (
     <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white dark:bg-neutral-950 w-full max-w-md rounded-xl shadow-2xl flex flex-col max-h-[90vh] border border-neutral-200 dark:border-neutral-800">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={`${template.name} template wizard`} tabIndex={-1} className="bg-white dark:bg-neutral-950 w-full max-w-md rounded-xl shadow-2xl flex flex-col max-h-[90vh] border border-neutral-200 dark:border-neutral-800">
         <div className="flex items-center justify-between p-4 border-b border-neutral-100 dark:border-neutral-800">
           <div className="flex items-center gap-2">
             <Wand2 className="text-blue-500" size={20} />
             <h3 className="font-serif text-xl dark:text-white tracking-tight">{template.name}</h3>
           </div>
-          <button onClick={onClose} className="p-2 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors">
+          <button onClick={onClose} aria-label="Close template wizard" className="p-2 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors">
             <X size={20} />
           </button>
         </div>

@@ -78,6 +78,9 @@ def render_via_browser(canvas_state: dict, variables_collection: list, copies: i
                 payload,
             )
             page.wait_for_selector("#render-done", timeout=30000, state="attached")
+            render_error = page.evaluate("window.__RENDER_ERROR__ || null")
+            if render_error:
+                raise RuntimeError(f"Frontend renderer failed: {render_error}")
             rendered_images = page.evaluate("window.__RENDERED_IMAGES__ || []")
         finally:
             page.close()

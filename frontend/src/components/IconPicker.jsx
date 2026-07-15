@@ -2,8 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import * as Icons from 'lucide-react';
 import { X, Search } from 'lucide-react';
+import { useDialogAccessibility } from '../utils/useDialogAccessibility';
 
 export default function IconPicker({ onClose, onSelect }) {
+  const dialogRef = useDialogAccessibility(onClose);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedIcon, setSelectedIcon] = useState(null);
   const svgRef = useRef(null);
@@ -35,7 +37,7 @@ export default function IconPicker({ onClose, onSelect }) {
       let bbox;
       try {
         bbox = svgElement.getBBox();
-      } catch (e) {
+      } catch (_error) {
         bbox = { x: 0, y: 0, width: 24, height: 24 };
       }
       
@@ -89,11 +91,11 @@ export default function IconPicker({ onClose, onSelect }) {
 
   return createPortal(
     <div className="fixed inset-0 bg-black/50 z-[120] flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white dark:bg-neutral-900 w-full max-w-2xl rounded-xl shadow-2xl flex flex-col max-h-[80vh] overflow-hidden border border-neutral-200 dark:border-neutral-800">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Select icon" tabIndex={-1} className="bg-white dark:bg-neutral-900 w-full max-w-2xl rounded-xl shadow-2xl flex flex-col max-h-[80vh] overflow-hidden border border-neutral-200 dark:border-neutral-800">
         
         <div className="flex items-center justify-between p-4 border-b border-neutral-100 dark:border-neutral-800">
           <h3 className="font-serif text-lg dark:text-white">Select Icon</h3>
-          <button onClick={onClose} className="p-2 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors">
+          <button onClick={onClose} aria-label="Close icon picker" className="p-2 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors">
             <X size={20} />
           </button>
         </div>

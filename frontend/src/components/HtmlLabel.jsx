@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { applyVars, processHtmlDynamicElements } from '../utils/rendering';
+import { sanitizeLabelHtml } from '../utils/htmlSecurity';
 import { useStore } from '../store';
 
 const overlayBaseStyle = {
@@ -15,12 +16,13 @@ export default function HtmlLabel({
   height,
   canvasBorder = 'none',
   canvasBorderThickness = 4,
-  onRenderComplete
+  onRenderComplete,
+  onRenderError
 }) {
   const containerRef = useRef(null);
   const defaultFont = useStore((state) => state.settings?.default_font) || 'Arial';
   const fontFamily = defaultFont.split('.')[0];
-  const processedHtml = applyVars(html || '', record);
+  const processedHtml = sanitizeLabelHtml(applyVars(html || '', record));
   const borderThickness = Math.max(1, Number(canvasBorderThickness) || 4);
   const [isReady, setIsReady] = useState(false);
 
@@ -43,7 +45,12 @@ export default function HtmlLabel({
 
       if (cancelled) return;
 
-      await processHtmlDynamicElements(container, width, height, () => cancelled);
+      try {
+        await processHtmlDynamicElements(container, width, height, () => cancelled);
+      } catch (error) {
+        if (!cancelled) onRenderError?.(error);
+        return;
+      }
 
       if (cancelled) return;
 
@@ -65,7 +72,7 @@ export default function HtmlLabel({
     return () => {
       cancelled = true;
     };
-  }, [processedHtml, width, height, fontFamily, onRenderComplete]);
+  }, [processedHtml, width, height, fontFamily, onRenderComplete, onRenderError]);
 
   return (
     <div

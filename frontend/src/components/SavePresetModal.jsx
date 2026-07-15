@@ -2,9 +2,14 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Save, LayoutTemplate } from 'lucide-react';
 import { useStore } from '../store';
+import { useShallow } from 'zustand/react/shallow';
+import { useDialogAccessibility } from '../utils/useDialogAccessibility';
 
 export default function SavePresetModal({ onClose }) {
-  const { savePreset, selectedPrinterInfo } = useStore();
+  const dialogRef = useDialogAccessibility(onClose);
+  const { savePreset, selectedPrinterInfo } = useStore(useShallow((state) => ({
+    savePreset: state.savePreset, selectedPrinterInfo: state.selectedPrinterInfo
+  })));
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -28,14 +33,14 @@ export default function SavePresetModal({ onClose }) {
 
   const modalContent = (
     <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white dark:bg-neutral-950 w-full max-w-sm rounded-xl shadow-2xl flex flex-col border border-neutral-200 dark:border-neutral-800">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Save preset" tabIndex={-1} className="bg-white dark:bg-neutral-950 w-full max-w-sm rounded-xl shadow-2xl flex flex-col border border-neutral-200 dark:border-neutral-800">
 
         <div className="flex items-center justify-between p-4 border-b border-neutral-100 dark:border-neutral-800">
           <div className="flex items-center gap-2">
             <LayoutTemplate className="text-blue-500" size={20} />
             <h3 className="font-serif text-lg dark:text-white">Save Preset</h3>
           </div>
-          <button onClick={onClose} className="p-2 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors">
+          <button onClick={onClose} aria-label="Close save preset dialog" className="p-2 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors">
             <X size={20} />
           </button>
         </div>

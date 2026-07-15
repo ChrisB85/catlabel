@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { useStore } from '../store';
+import { useShallow } from 'zustand/react/shallow';
 import ProjectTree from './ProjectTree';
 import SavePresetModal from './SavePresetModal';
 import PrinterDropdown from './PrinterDropdown';
 import PresetPickerModal from './PresetPickerModal';
+import { getPageIndices } from '../utils/canvasPages';
+import { apiFetch } from '../utils/apiClient';
 import {
   ChevronDown, ChevronRight, LayoutTemplate,
   Menu, Printer, Wifi, Archive
@@ -24,8 +27,15 @@ export default function Sidebar() {
     printPages,
     selectedPagesForPrint,
     manualPrinters,
-    designMode
-  } = useStore();
+    pageLayouts,
+    currentPage
+  } = useStore(useShallow((state) => ({
+    items: state.items, selectedPrinter: state.selectedPrinter, setSelectedPrinter: state.setSelectedPrinter,
+    theme: state.theme, setTheme: state.setTheme, isSidebarCollapsed: state.isSidebarCollapsed,
+    toggleSidebar: state.toggleSidebar, printCopies: state.printCopies, setPrintCopies: state.setPrintCopies,
+    isPrinting: state.isPrinting, printPages: state.printPages, selectedPagesForPrint: state.selectedPagesForPrint,
+    manualPrinters: state.manualPrinters, pageLayouts: state.pageLayouts, currentPage: state.currentPage
+  })));
 
   const [printers, setPrinters] = useState([]);
   const [isScanning, setIsScanning] = useState(false);
@@ -33,13 +43,11 @@ export default function Sidebar() {
   const [showSavePresetModal, setShowSavePresetModal] = useState(false);
   const [showPresetPicker, setShowPresetPicker] = useState(false);
   const activePreset = useStore((state) => state.getActivePreset());
-  const batchRecords = useStore((state) => state.batchRecords) || [{}];
-  const isHtmlMode = designMode === 'html';
 
-  const handleScan = async () => {
+  const handleScan = useCallback(async () => {
     setIsScanning(true);
     try {
-      const res = await fetch('/api/printers/scan');
+      const res = await apiFetch('/api/printers/scan');
       const data = await res.json();
       setPrinters(data.devices || []);
 
@@ -51,32 +59,33 @@ export default function Sidebar() {
       alert('Failed to scan for printers. Is the backend running on port 8000?');
     }
     setIsScanning(false);
-  };
+  }, [setSelectedPrinter]);
 
   useEffect(() => {
+    if (window.matchMedia('(max-width: 767px)').matches && !useStore.getState().isSidebarCollapsed) {
+      useStore.getState().toggleSidebar();
+    }
     useStore.getState().fetchProjects();
     useStore.getState().fetchSettings();
     useStore.getState().fetchAddresses();
     useStore.getState().fetchPresets();
 
     handleScan();
-  }, []);
+  }, [handleScan]);
 
-  const maxPage = isHtmlMode
-    ? batchRecords.length - 1
-    : items.reduce((max, item) => Math.max(max, Number(item.pageIndex ?? 0)), 0);
-  const pageCount = maxPage + 1;
+  const pageIndices = getPageIndices({ items, pageLayouts, currentPage });
+  const pageCount = pageIndices.length;
 
   const handlePrintCollapsed = () => {
     toggleSidebar();
   };
 
   const handlePrintSingle = () => {
-    printPages([0]);
+    printPages([pageIndices[0]]);
   };
 
   const handlePrintAll = () => {
-    printPages(Array.from({ length: pageCount }, (_, i) => i));
+    printPages(pageIndices);
   };
 
   const handlePrintSelected = () => {
@@ -111,7 +120,7 @@ export default function Sidebar() {
             <h1 className="text-3xl font-serif tracking-tight text-neutral-900 dark:text-white">CatLabel.</h1>
           </div>
         )}
-        <button onClick={toggleSidebar} className="p-2 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors flex-shrink-0">
+        <button type="button" onClick={toggleSidebar} aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} className="p-2 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors flex-shrink-0">
           <Menu size={24} />
         </button>
       </div>
@@ -203,8 +212,10 @@ export default function Sidebar() {
         <SidebarButton icon={Archive} label="Saved Projects (Expand to view)" onClick={toggleSidebar} />
       ) : (
         <div className="space-y-3">
-          <div
-            className="flex items-center justify-between cursor-pointer border-b border-neutral-100 dark:border-neutral-800 pb-2 group"
+          <button
+            type="button"
+            aria-expanded={showProjects}
+            className="flex w-full items-center justify-between cursor-pointer border-b border-neutral-100 dark:border-neutral-800 pb-2 group"
             onClick={() => setShowProjects(!showProjects)}
           >
             <h2 className="text-[10px] font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-widest group-hover:text-neutral-900 dark:group-hover:text-white transition-colors">Saved Projects</h2>
@@ -213,7 +224,7 @@ export default function Sidebar() {
             ) : (
               <ChevronRight size={14} className="text-neutral-400 group-hover:text-neutral-900 dark:group-hover:text-white transition-colors" />
             )}
-          </div>
+          </button>
 
           {showProjects && (
             <ProjectTree />

@@ -1,33 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { X, Upload, ArrowRight } from 'lucide-react';
 import { useStore } from '../store';
+import { extractTemplateVariables, parseCsvRecords } from '../utils/batchData';
+import { useDialogAccessibility } from '../utils/useDialogAccessibility';
 
 export default function BatchPrintModal({ onClose }) {
+  const dialogRef = useDialogAccessibility(onClose);
   const batchRecords = useStore(state => state.batchRecords);
   const items = useStore(state => state.items);
-  const pageLayouts = useStore(state => state.pageLayouts) || [];
+  const pageLayouts = useStore(state => state.pageLayouts);
   
   // Extract variables from the current canvas
   const canvasVariables = React.useMemo(() => {
-    const vars = new Set();
-    items.forEach(i => {
-      const texts = [i.text, i.title, i.subtitle, i.data, i.html, i.custom_html].filter(Boolean);
-      texts.forEach(t => {
-        const matches = String(t).match(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g);
-        if (matches) {
-          matches.forEach(m => vars.add(m.replace(/[{}]/g, '').trim()));
-        }
-      });
-    });
-
-    pageLayouts.forEach(layout => {
-      const matches = String(layout.htmlContent || '').match(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g);
-      if (matches) {
-        matches.forEach(m => vars.add(m.replace(/[{}]/g, '').trim()));
-      }
-    });
-
-    return Array.from(vars);
+    return extractTemplateVariables({ items, pageLayouts: pageLayouts || [] });
   }, [items, pageLayouts]);
 
   const hasExistingBatchRecords = Array.isArray(batchRecords) && (
@@ -38,6 +23,7 @@ export default function BatchPrintModal({ onClose }) {
   const [csvData, setCsvData] = useState([]);
   const [headers, setHeaders] = useState([]);
   const [mapping, setMapping] = useState({});
+  const [fileError, setFileError] = useState('');
 
   useEffect(() => {
     // Auto-map if header matches variable name
@@ -57,20 +43,18 @@ export default function BatchPrintModal({ onClose }) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const text = ev.target.result;
-      const lines = text.split('\n').filter(l => l.trim() !== '');
-      if (lines.length > 0) {
-        const head = lines[0].split(',').map(h => h.trim());
-        setHeaders(head);
-        const data = lines.slice(1).map(line => {
-          const vals = line.split(',');
-          let obj = {};
-          head.forEach((h, i) => { obj[h] = vals[i] ? vals[i].trim() : ''; });
-          return obj;
-        });
-        setCsvData(data);
+      try {
+        const parsed = parseCsvRecords(ev.target.result);
+        setHeaders(parsed.headers);
+        setCsvData(parsed.records);
+        setFileError('');
+      } catch (error) {
+        setHeaders([]);
+        setCsvData([]);
+        setFileError(error.message);
       }
     };
+    reader.onerror = () => setFileError('The CSV file could not be read.');
     reader.readAsText(file);
   };
 
@@ -100,11 +84,11 @@ export default function BatchPrintModal({ onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white dark:bg-neutral-900 w-full max-w-md rounded-xl shadow-2xl flex flex-col border border-neutral-200 dark:border-neutral-800">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Import batch data" tabIndex={-1} className="bg-white dark:bg-neutral-900 w-full max-w-md rounded-xl shadow-2xl flex flex-col border border-neutral-200 dark:border-neutral-800">
         
         <div className="flex items-center justify-between p-4 border-b border-neutral-100 dark:border-neutral-800">
           <h3 className="font-serif text-lg dark:text-white">Import CSV Batch Data</h3>
-          <button onClick={onClose} className="p-2 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors">
+          <button onClick={onClose} aria-label="Close batch import" className="p-2 text-neutral-500 hover:text-neutral-900 dark:hover:text-white transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -122,6 +106,12 @@ export default function BatchPrintModal({ onClose }) {
           {headers.length > 0 && (
             <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded">
               <p className="text-xs text-green-600 font-bold mb-1">✓ File Registered ({csvData.length} records)</p>
+            </div>
+          )}
+
+          {fileError && (
+            <div role="alert" className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded">
+              <p className="text-xs text-red-700 dark:text-red-400 font-bold">{fileError}</p>
             </div>
           )}
 

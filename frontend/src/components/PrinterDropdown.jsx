@@ -5,7 +5,7 @@ import { useStore } from '../store';
 export default function PrinterDropdown({ printers, manualPrinters, selectedPrinter, onSelect }) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
-  const { removeManualPrinter } = useStore();
+  const removeManualPrinter = useStore((state) => state.removeManualPrinter);
 
   useEffect(() => {
     const handleClickOutside = (event) => {

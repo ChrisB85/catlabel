@@ -1,5 +1,4 @@
-import assert from 'node:assert/strict';
-import test from 'node:test';
+import { expect, test } from 'vitest';
 
 import {
   ApiRequestError,
@@ -22,14 +21,14 @@ test('structured print errors retain the backend stage and cause', async () => {
   };
 
   const error = await apiErrorFromResponse(response, 'Print failed');
-  assert.ok(error instanceof ApiRequestError);
-  assert.equal(error.stage, 'connect');
-  assert.equal(error.technicalDetail, 'Access is denied.');
+  expect(error).toBeInstanceOf(ApiRequestError);
+  expect(error.stage).toBe('connect');
+  expect(error.technicalDetail).toBe('Access is denied.');
 
   const message = await describePrintError(error);
-  assert.match(message, /Access is denied/);
-  assert.match(message, /reference: deadbeef/);
-  assert.match(message, /HTTP 503/);
+  expect(message).toMatch(/Access is denied/);
+  expect(message).toMatch(/reference: deadbeef/);
+  expect(message).toMatch(/HTTP 503/);
 });
 
 test('network failures distinguish a stopped server from an API error', async () => {
@@ -37,8 +36,8 @@ test('network failures distinguish a stopped server from an API error', async ()
     new TypeError('Failed to fetch'),
     async () => false,
   );
-  assert.match(message, /server stopped responding/i);
-  assert.doesNotMatch(message, /^Failed to fetch$/);
+  expect(message).toMatch(/server stopped responding/i);
+  expect(message).not.toMatch(/^Failed to fetch$/);
 });
 
 test('plain-text HTTP failures are still useful', async () => {
@@ -46,6 +45,6 @@ test('plain-text HTTP failures are still useful', async () => {
     status: 500,
     text: async () => 'Internal Server Error',
   });
-  assert.equal(error.message, 'Internal Server Error');
-  assert.equal(error.status, 500);
+  expect(error.message).toBe('Internal Server Error');
+  expect(error.status).toBe(500);
 });
