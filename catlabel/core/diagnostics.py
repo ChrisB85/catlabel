@@ -10,6 +10,10 @@ from .. import reporting
 
 _WARNED = False
 _REQUIREMENTS_PATH = Path(__file__).resolve().parents[2] / "requirements.txt"
+_IMPORT_NAMES = {
+    "google-cloud-aiplatform": "google.cloud.aiplatform",
+    "python-multipart": "multipart",
+}
 
 
 def emit_startup_warnings(reporter: Optional[reporting.Reporter] = None) -> None:
@@ -62,10 +66,13 @@ def collect_dependency_warnings() -> List[str]:
         elif requirement == "python-lzo":
             if not _has_module("lzo"):
                 warnings.append("Missing dependency: python-lzo.")
-        elif not _has_module(requirement):
+        elif not _has_module(_IMPORT_NAMES.get(requirement, requirement)):
             warnings.append(f"Missing dependency: {requirement}.")
     return warnings
 
 
 def _has_module(name: str) -> bool:
-    return importlib.util.find_spec(name) is not None
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ModuleNotFoundError):
+        return False

@@ -1,0 +1,3 @@
+dulwich==1.2.10
+pyinstaller==6.21.0
+urllib3==2.7.0

@@ -1,0 +1,32 @@
+[workspace]
+name = "catlabel"
+channels = ["conda-forge"]
+platforms = ["win-64"]
+
+[dependencies]
+python = "3.11.*"
+
+[pypi-dependencies]
+fastapi = ">=0.115.6"
+python-multipart = ">=0.0.20"
+uvicorn = ">=0.34.0"
+sqlmodel = ">=0.0.22"
+pillow = ">=11.1.0"
+pypdfium2 = ">=4.30.1"
+bleak = ">=0.22.3"
+crc8 = ">=0.2.1"
+pyserial = ">=3.5"
+python-lzo = ">=1.15"
+winsdk = ">=1.0.0b10"
+google-cloud-aiplatform = "*"
+litellm = ">=1.59.3,<1.92.0"
+
+[feature.headless.pypi-dependencies]
+playwright = ">=1.40.0"
+
+[environments]
+headless = ["headless"]
+
+[tasks]
+start = "python -m catlabel"
+test = "python -m unittest discover -s tests -v"

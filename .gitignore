@@ -3,6 +3,8 @@
 /bin/
 /venv/
 .venv/
+/.pixi/
+/.launcher-build/
 
 # User Data
 /data/

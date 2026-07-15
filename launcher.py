@@ -1,101 +1,153 @@
+from __future__ import annotations
+
 import os
-import sys
-import subprocess
 import platform
+from pathlib import Path
+import subprocess
+import sys
 
 try:
     from dulwich import porcelain
 except ImportError:
-    print("Dulwich is required to run this script from source.")
-    print("Install it via: pip install dulwich urllib3")
-    sys.exit(1)
+    porcelain = None
+
 
 REPO_URL = "https://github.com/lukaszliniewicz/catlabel.git"
-TARGET_DIR = "catlabel"
+TARGET_DIR_NAME = "catlabel"
 
-def clone_repo():
+
+def launcher_directory() -> Path:
+    """Return the folder containing the script or frozen launcher executable."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+def pause_on_error() -> None:
+    try:
+        input("Press Enter to exit...")
+    except EOFError:
+        pass
+
+
+def clone_repo(target_dir: Path) -> bool:
     print(f"[*] Cloning CatLabel repository from {REPO_URL}...")
     print("[*] Please wait, this might take a moment...")
     try:
-        porcelain.clone(REPO_URL, TARGET_DIR)
-        print("[*] Clone complete!")
-    except Exception as e:
-        print(f"[!] Error cloning repository: {e}")
-        input("Press Enter to exit...")
-        sys.exit(1)
+        repo = porcelain.clone(REPO_URL, str(target_dir))
+        repo.close()
+    except Exception as exc:
+        print(f"[!] Error cloning repository: {exc}")
+        return False
+    print("[*] Clone complete!")
+    return True
 
-def update_repo():
-    print(f"[*] Checking for updates in {TARGET_DIR}...")
+
+def update_repo(target_dir: Path) -> bool:
+    print(f"[*] Checking for updates in {target_dir.name}...")
     try:
-        repo = porcelain.open_repo(TARGET_DIR)
-        # Getting current commit
-        current_commit = repo.head()
-        porcelain.pull(repo, REPO_URL)
-        new_commit = repo.head()
-        if current_commit != new_commit:
-            print("[*] Updates pulled successfully! Marking for rebuild.")
-            with open(os.path.join(TARGET_DIR, ".update_needed"), "w") as f:
-                f.write("1")
-        else:
-            print("[*] CatLabel is up to date.")
-    except Exception as e:
-        print(f"[!] Error updating repository: {e}. Skipping update.")
+        with porcelain.open_repo(str(target_dir)) as repo:
+            current_commit = repo.head()
+            porcelain.pull(repo, REPO_URL, ff_only=True)
+            new_commit = repo.head()
+    except Exception as exc:
+        print(f"[!] Error updating repository: {exc}. Continuing with the local copy.")
+        return False
 
-def run_app():
-    print("[*] Handing over to the CatLabel Bootstrapper...\n")
-    os.chdir(TARGET_DIR)
-    
-    system = platform.system().lower()
-    
-    if "windows" in system:
-        script = "run.bat"
-        cmd = ["cmd.exe", "/c", script]
+    if current_commit != new_commit:
+        print("[*] Updates pulled successfully! Marking the environment for synchronization.")
+        (target_dir / ".update_needed").write_text("1", encoding="ascii")
     else:
-        script = "./run.sh"
-        cmd = [script]
-        if os.path.exists("run.sh"):
-            os.chmod("run.sh", 0o755)
-            
-    if not os.path.exists(script):
-        print(f"[!] Critical Error: {script} not found in the cloned repository.")
-        input("Press Enter to exit...")
-        sys.exit(1)
-        
+        print("[*] CatLabel is up to date.")
+    return True
+
+
+def environment_exists(target_dir: Path) -> bool:
+    environments_dir = target_dir / ".pixi" / "envs"
+    return any(
+        (environments_dir / name / "python.exe").is_file()
+        for name in ("default", "headless")
+    )
+
+
+def run_app(target_dir: Path) -> int:
+    print("[*] Handing over to the CatLabel Bootstrapper...\n")
+    system = platform.system().lower()
+
+    if "windows" in system:
+        script = target_dir / "run.bat"
+        # cmd.exe applies special quote stripping after /c. Running the script by
+        # name from its working directory is reliable even when that path has spaces.
+        command = [os.environ.get("COMSPEC", "cmd.exe"), "/d", "/c", script.name]
+    else:
+        script = target_dir / "run.sh"
+        command = [str(script)]
+        if script.exists():
+            script.chmod(0o755)
+
+    if not script.is_file():
+        print(f"[!] Critical error: {script.name} was not found in the cloned repository.")
+        pause_on_error()
+        return 1
+
+    process: subprocess.Popen | None = None
     try:
-        process = subprocess.Popen(cmd)
-        process.wait()
+        process = subprocess.Popen(command, cwd=str(target_dir))
+        return_code = process.wait()
     except KeyboardInterrupt:
         print("\n[*] Interrupted by user. Shutting down...")
-        process.terminate()
-    except Exception as e:
-        print(f"[!] Error running the application: {e}")
-        input("Press Enter to exit...")
+        if process is not None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+        return 130
+    except Exception as exc:
+        print(f"[!] Error running the application: {exc}")
+        pause_on_error()
+        return 1
 
-def main():
+    if return_code != 0:
+        print(f"[!] CatLabel Bootstrapper exited with code {return_code}.")
+    return return_code
+
+
+def main() -> int:
     print("=========================================")
     print("          CatLabel Studio Launcher       ")
     print("=========================================\n")
-    
-    if not os.path.exists(TARGET_DIR):
-        print(f"[*] Target directory '{TARGET_DIR}' not found.")
+
+    if porcelain is None:
+        print("Dulwich is required to run this script from source.")
+        print("Install it via: python -m pip install -r launcher-requirements.txt")
+        pause_on_error()
+        return 1
+
+    target_dir = launcher_directory() / TARGET_DIR_NAME
+    if not target_dir.exists():
+        print(f"[*] Target directory '{TARGET_DIR_NAME}' not found.")
         print("[*] Initializing new installation...")
-        clone_repo()
+        if not clone_repo(target_dir):
+            pause_on_error()
+            return 1
     else:
-        if not os.path.exists(os.path.join(TARGET_DIR, ".git")):
-            print(f"[!] The directory '{TARGET_DIR}' exists but is not a valid repository.")
+        if not (target_dir / ".git").is_dir():
+            print(f"[!] The directory '{target_dir}' exists but is not a valid repository.")
             print("[!] Please delete or rename the folder and try again.")
-            input("Press Enter to exit...")
-            sys.exit(1)
-        
-        update_repo()
-        
-        if os.path.exists(os.path.join(TARGET_DIR, "env")):
-            print("[*] Existing setup detected. Launching CatLabel...")
+            pause_on_error()
+            return 1
+
+        update_repo(target_dir)
+
+        if environment_exists(target_dir):
+            print("[*] Existing Pixi setup detected. Launching CatLabel...")
         else:
-            print("[*] Repository found, but environment is missing.")
+            print("[*] Repository found, but the Pixi environment is missing.")
             print("[*] Setup will begin downloading dependencies now...")
-            
-    run_app()
+
+    return run_app(target_dir)
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

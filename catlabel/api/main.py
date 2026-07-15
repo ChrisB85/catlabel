@@ -45,7 +45,7 @@ def download_default_fonts():
         "FiraCode.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/firacode/FiraCode%5Bwght%5D.ttf",
         "Oswald.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/oswald/Oswald%5Bwght%5D.ttf",
         "BebasNeue.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/bebasneue/BebasNeue-Regular.ttf",
-        "PlayfairDisplay.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay%5Bital%2Cwght%5D.ttf"
+        "PlayfairDisplay.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf"
     }
     os.makedirs("data/fonts", exist_ok=True)
     
@@ -61,11 +61,15 @@ def download_default_fonts():
         target = os.path.join("data/fonts", filename)
         if not os.path.exists(target):
             print(f"Downloading Variable Font: {filename}...")
+            temporary_target = f"{target}.download"
             try:
                 req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req) as response, open(target, 'wb') as f:
-                    f.write(response.read())
+                with urllib.request.urlopen(req, timeout=30) as response, open(temporary_target, 'wb') as f:
+                    shutil.copyfileobj(response, f)
+                os.replace(temporary_target, target)
             except Exception as e:
+                if os.path.exists(temporary_target):
+                    os.remove(temporary_target)
                 print(f"Failed to download {filename}: {e}")
 
 @asynccontextmanager

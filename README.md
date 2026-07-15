@@ -26,13 +26,15 @@ CatLabel communicates directly with portable thermal printers over Bluetooth. It
 
 ## Installation & Running
 
-CatLabel runs a local web server and opens the interface in your browser. It manages its own isolated environment using Micromamba, so it won't interfere with your system's Python or Node.js installations.
+CatLabel runs a local web server and opens the interface in your browser. On Windows, it manages a locked, isolated environment with a portable copy of Pixi, so it does not require a system Python or Node.js installation.
 
 ### Windows
 The easiest way to run CatLabel on Windows is using the standalone launcher.
 1. Download `CatLabel-Launcher.exe` from the [Releases](../../releases) page.
 2. Place it in an empty folder where you want the app to reside.
-3. Double-click the executable. It will download the necessary files, configure the environment, and start the app.
+3. Double-click the executable. It downloads the repository, a verified standalone Pixi executable, and the locked dependencies before starting the app.
+
+The launcher keeps the Pixi environment and cache inside the CatLabel folder. Run `catlabel\run.bat --install-headless` if you later want to add optional headless API rendering support.
 
 https://github.com/user-attachments/assets/4e784645-0ccf-478c-a6e1-0c41a3519624
 
@@ -40,7 +42,7 @@ https://github.com/user-attachments/assets/4e784645-0ccf-478c-a6e1-0c41a3519624
 1. Clone or download this repository.
 2. Open a terminal in the repository folder.
 3. Run the bootstrap script: `chmod +x run.sh && ./run.sh`
-4. The script will download Micromamba, install dependencies, compile the frontend, and start the server.
+4. The script downloads Micromamba, installs the dependencies, and starts the server. The compiled frontend is included in the repository.
 
 *The app runs at [http://localhost:8000](http://localhost:8000).*
 
@@ -121,7 +123,7 @@ In the **Canvas & Printer** tab, you can override default hardware behaviors:
 *   **Windows Pairing:** Windows sometimes refuses to communicate with generic SPP (Serial Port Profile) printers unless they are explicitly paired in the Windows Settings menu first. If the app fails to connect, pair it manually in Windows, then try again.
 *   **macOS Connections:** Apple restricts classic Bluetooth SPP connections. CatLabel uses a custom PyObjC bridge to handle this, but you may occasionally need to restart the printer if macOS caches a stale connection state.
 *   **Niimbot Printers:** Niimbot devices use Bluetooth Low Energy (BLE). They do not require OS-level pairing. The app will connect to them directly.
-*   **Headless Rendering:** The HTML layout mode requires Playwright (a headless Chromium browser) to rasterize the HTML into a printable image. If you skipped this step during installation, HTML elements and templates will not render correctly. You can trigger the installation manually by running `python -m playwright install chromium` inside the `env` folder.
+*   **Headless API Rendering:** Normal browser-based design and printing does not require Playwright. Third-party scripts that ask the backend API to rasterize HTML do require the optional headless Chromium environment. On Windows, install or repair it with `catlabel\run.bat --install-headless` from the folder containing the launcher.
 
 ---
 
