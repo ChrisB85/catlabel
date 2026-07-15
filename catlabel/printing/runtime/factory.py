@@ -1,36 +1,55 @@
 from __future__ import annotations
 
-from typing import Any as PrinterDevice
+from typing import Any
+
 from ...protocol.family import ProtocolFamily
 from .base import RuntimeController
 from .v5c import V5CRuntimeController
 from .v5g import V5GRuntimeController
 from .v5x import V5XRuntimeController
+from .luck_normal import LuckNormalRuntimeController
+from .funny_lx import FunnyLxRuntimeController
 
 
-def runtime_controller_for_device(device: PrinterDevice) -> RuntimeController | None:
-    if device.protocol_family is ProtocolFamily.V5G:
+def runtime_controller_for_device(
+    device: Any,
+    *,
+    protocol_family: ProtocolFamily | str | None = None,
+    bluetooth_address: str | None = None,
+) -> RuntimeController | None:
+    """Select live-session behavior from a resolved device/model in printing."""
+
+    family = ProtocolFamily.from_value(
+        protocol_family or getattr(device, "protocol_family", None)
+    )
+    if family is ProtocolFamily.V5G:
+        density_profile = getattr(device, "runtime_density_profile", None)
         return V5GRuntimeController(
-            helper_kind=device.runtime_variant,
+            helper_kind=getattr(device, "runtime_variant", None),
             density_profile_key=(
-                None
-                if device.runtime_density_profile is None
-                else device.runtime_density_profile.profile_key
+                getattr(device, "runtime_density_profile_key", None)
+                or getattr(density_profile, "profile_key", None)
             ),
-            density_profile=device.runtime_density_profile or device.profile,
+            density_profile=(density_profile or getattr(device, "profile", None)),
+            density_levels=getattr(device, "runtime_density", None),
         )
-    if device.protocol_family is ProtocolFamily.V5X:
+    if family is ProtocolFamily.V5X:
         return V5XRuntimeController()
-    if device.protocol_family is ProtocolFamily.V5C:
+    if family is ProtocolFamily.V5C:
         return V5CRuntimeController()
-    return None
-
-
-def _runtime_controller_for_family(protocol_family: ProtocolFamily) -> RuntimeController | None:
-    if protocol_family is ProtocolFamily.V5G:
-        return V5GRuntimeController()
-    if protocol_family is ProtocolFamily.V5X:
-        return V5XRuntimeController()
-    if protocol_family is ProtocolFamily.V5C:
-        return V5CRuntimeController()
+    if (
+        family is ProtocolFamily.LUCK_NORMAL
+        and getattr(device, "protocol_variant", None)
+        in {"lujiang_normal", "lujiang_normal_h"}
+    ):
+        return LuckNormalRuntimeController(
+            protocol_variant=getattr(device, "protocol_variant")
+        )
+    if family is ProtocolFamily.FUNNY_LX:
+        return FunnyLxRuntimeController(
+            bluetooth_address=(
+                bluetooth_address
+                or getattr(device, "address", "")
+            )
+        )
     return None

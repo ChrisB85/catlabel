@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from ....protocol.family import ProtocolFamily
+from ....devices import BleTransportProfile
 from ..types import DeviceInfo, DeviceTransport, SocketLike
 from .... import reporting
 
@@ -16,7 +16,7 @@ class _BaseBluetoothAdapter:
     def create_socket(
         self,
         pairing_hint: Optional[bool] = None,
-        protocol_family: Optional[ProtocolFamily] = None,
+        ble_profile: Optional[BleTransportProfile] = None,
         reporter: reporting.Reporter = reporting.DUMMY_REPORTER,
     ) -> SocketLike:
         raise NotImplementedError

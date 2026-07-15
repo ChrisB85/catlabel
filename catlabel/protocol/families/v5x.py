@@ -5,7 +5,7 @@ from ..packet import crc8_value, make_packet
 from ..family import ProtocolFamily
 from ...raster import PixelFormat
 from ..types import ImageEncoding, ImagePipelineConfig
-from .base import BleTransportProfile, FlowControlProfile, PrintJobRequest, ProtocolBehavior
+from .base import PrintJobRequest, ProtocolBehavior
 
 def _hex_bytes(value: str) -> bytes:
     return bytes.fromhex(value)
@@ -50,27 +50,12 @@ _FLOW_RESUME_HEX = (
     "2221AE0101000000FF",
     "2221AE0001001000",
 )
-
-_FLOW_CONTROL = FlowControlProfile(
-    pause_packets=frozenset(_hex_bytes(value) for value in _FLOW_PAUSE_HEX),
-    resume_packets=frozenset(_hex_bytes(value) for value in _FLOW_RESUME_HEX),
+V5X_NOTIFY_PAUSE_PACKETS = frozenset(
+    _hex_bytes(value) for value in _FLOW_PAUSE_HEX
 )
-
-
-TRANSPORT = BleTransportProfile(
-    split_bulk_writes=True,
-    connect_packets=(V5X_CONNECT_INIT_PACKET,),
-    connect_delay_ms=200,
-    preferred_service_uuid=V5X_SERVICE_UUID,
-    bulk_char_uuid=V5X_BULK_DATA_UUID,
-    notify_char_uuid=V5X_NOTIFY_UUID,
-    flow_control=_FLOW_CONTROL,
-    # V5X bulk writes stay stable at 180-byte chunks even when the negotiated
-    # MTU is larger.
-    bulk_chunk_cap=180,
-    split_tail_packets=(V5X_FINALIZE_PACKET,),
+V5X_NOTIFY_RESUME_PACKETS = frozenset(
+    _hex_bytes(value) for value in _FLOW_RESUME_HEX
 )
-
 
 def _raw_lsb_payload(pixels: list[int] | tuple[int, ...], width: int) -> bytes:
     if width % 8 != 0:
@@ -160,7 +145,6 @@ def build_job(request: PrintJobRequest) -> bytes:
 
 
 BEHAVIOR = ProtocolBehavior(
-    transport=TRANSPORT,
     default_image_pipeline=ImagePipelineConfig(
         formats=(PixelFormat.BW1, PixelFormat.GRAY4, PixelFormat.GRAY8),
         encoding=ImageEncoding.V5X_DOT,

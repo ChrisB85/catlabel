@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
+from collections.abc import Callable
 from typing import List, Optional, Tuple
 
 from .adapters import _get_ble_adapter, _get_classic_adapter
@@ -71,12 +72,122 @@ class SppBackend:
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._disconnect_blocking)
 
+    async def attach_runtime_controller(
+        self,
+        runtime_controller,
+        *,
+        timeout: float = 1.0,
+    ) -> None:
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(
+            None,
+            self._attach_runtime_controller_blocking,
+            runtime_controller,
+            timeout,
+        )
+
+    def can_send_control_packet(self) -> bool:
+        return self._can_send_control_packet_blocking()
+
+    def can_send_bulk_payload(self) -> bool:
+        return self._can_send_bulk_payload_blocking()
+
+    def can_query_control_packet(self) -> bool:
+        return self._can_query_control_packet_blocking()
+
+    def can_wait_for_notification(self) -> bool:
+        return self._can_wait_for_notification_blocking()
+
+    def can_send_control_packet_wait_notification(self) -> bool:
+        return self._can_send_control_packet_wait_notification_blocking()
+
+    async def send_control_packet(
+        self,
+        packet: bytes,
+        *,
+        timeout: float = 1.0,
+    ) -> bool:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            self._send_control_packet_blocking,
+            packet,
+            timeout,
+        )
+
+    async def send_bulk_payload(
+        self,
+        data: bytes,
+        *,
+        timeout: float = 1.0,
+    ) -> bool:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            self._send_bulk_payload_blocking,
+            data,
+            timeout,
+        )
+
+    async def query_control_packet(
+        self,
+        packet: bytes,
+        *,
+        timeout: float = 1.0,
+        reply_complete: Callable[[bytes], bool] | None = None,
+    ) -> bytes | None:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            self._query_control_packet_blocking,
+            packet,
+            timeout,
+            reply_complete,
+        )
+
+    async def wait_for_notification(
+        self,
+        label: str,
+        match: Callable[[bytes], bool],
+        *,
+        timeout: float,
+        required: bool = True,
+    ) -> bytes | None:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            self._wait_for_notification_blocking,
+            label,
+            match,
+            timeout,
+            required,
+        )
+
+    async def send_control_packet_wait_notification(
+        self,
+        packet: bytes,
+        *,
+        label: str,
+        match: Callable[[bytes], bool],
+        timeout: float,
+        required: bool = True,
+    ) -> bytes | None:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            self._send_control_packet_wait_notification_blocking,
+            packet,
+            label,
+            match,
+            timeout,
+            required,
+        )
+
     async def write(
         self,
         data: bytes,
         chunk_size: int,
         delay_ms: int = 0,
-        runtime_controller=None,
         interval_ms: Optional[int] = None,
     ) -> None:
         if interval_ms is not None and not delay_ms:
@@ -88,7 +199,6 @@ class SppBackend:
             data,
             chunk_size,
             delay_ms,
-            runtime_controller,
         )
 
     def _connect_attempts_blocking(
@@ -222,11 +332,12 @@ class SppBackend:
                     short="Bluetooth",
                     detail=f"Trying RFCOMM channel {channel} for {device.address}",
                 )
-                sock = adapter.create_socket(
-                    pairing_hint,
-                    protocol_family=device.protocol_family,
-                    reporter=self._reporter,
-                )
+                socket_options = {
+                    "reporter": self._reporter,
+                }
+                if device.transport is DeviceTransport.BLE:
+                    socket_options["ble_profile"] = device.ble_profile
+                sock = adapter.create_socket(pairing_hint, **socket_options)
                 set_timeout = getattr(sock, "settimeout", None)
                 if callable(set_timeout):
                     set_timeout(8)
@@ -281,12 +392,149 @@ class SppBackend:
             self._channel = None
             self._transport = None
 
+    def _attach_runtime_controller_blocking(
+        self,
+        runtime_controller,
+        timeout: float,
+    ) -> None:
+        if runtime_controller is None or not self._sock or not self._connected:
+            return
+        attach = getattr(self._sock, "attach_runtime_controller", None)
+        if callable(attach):
+            attach(runtime_controller, timeout=timeout)
+
+    def _can_send_control_packet_blocking(self) -> bool:
+        if not self._sock or not self._connected:
+            return False
+        if self._transport == DeviceTransport.BLE:
+            checker = getattr(self._sock, "can_send_control_packet", None)
+            if callable(checker):
+                return bool(checker())
+            return callable(getattr(self._sock, "send_control_packet", None))
+        return True
+
+    def _can_send_bulk_payload_blocking(self) -> bool:
+        if not self._sock or not self._connected or self._transport != DeviceTransport.BLE:
+            return False
+        checker = getattr(self._sock, "can_send_bulk_payload", None)
+        if callable(checker):
+            return bool(checker())
+        return callable(getattr(self._sock, "send_bulk_payload", None))
+
+    def _can_query_control_packet_blocking(self) -> bool:
+        if not self._sock or not self._connected:
+            return False
+        if self._transport == DeviceTransport.BLE:
+            checker = getattr(self._sock, "can_query_control_packet", None)
+            return bool(checker()) if callable(checker) else False
+        return callable(getattr(self._sock, "recv", None))
+
+    def _can_wait_for_notification_blocking(self) -> bool:
+        if not self._sock or not self._connected or self._transport != DeviceTransport.BLE:
+            return False
+        checker = getattr(self._sock, "can_wait_for_notification", None)
+        return bool(checker()) if callable(checker) else False
+
+    def _can_send_control_packet_wait_notification_blocking(self) -> bool:
+        if not self._sock or not self._connected or self._transport != DeviceTransport.BLE:
+            return False
+        checker = getattr(
+            self._sock,
+            "can_send_control_packet_wait_notification",
+            None,
+        )
+        return bool(checker()) if callable(checker) else False
+
+    def _send_control_packet_blocking(self, packet: bytes, timeout: float) -> bool:
+        if not self._sock or not self._connected:
+            return False
+        if self._transport == DeviceTransport.BLE:
+            sender = getattr(self._sock, "send_control_packet", None)
+            return bool(sender(packet, timeout=timeout)) if callable(sender) else False
+        with self._lock:
+            return _send_control_packet(self._sock, packet, timeout=timeout)
+
+    def _send_bulk_payload_blocking(self, data: bytes, timeout: float) -> bool:
+        if not self._sock or not self._connected or self._transport != DeviceTransport.BLE:
+            return False
+        sender = getattr(self._sock, "send_bulk_payload", None)
+        if not callable(sender):
+            return False
+        with self._lock:
+            return bool(sender(data, timeout=timeout))
+
+    def _query_control_packet_blocking(
+        self,
+        packet: bytes,
+        timeout: float,
+        reply_complete: Callable[[bytes], bool] | None = None,
+    ) -> bytes | None:
+        if not self._sock or not self._connected:
+            return None
+        if self._transport == DeviceTransport.BLE:
+            query = getattr(self._sock, "query_control_packet", None)
+            if not callable(query):
+                return None
+            if reply_complete is None:
+                return query(packet, timeout=timeout)
+            return query(packet, timeout=timeout, reply_complete=reply_complete)
+        with self._lock:
+            return _query_control_packet(
+                self._sock,
+                packet,
+                timeout=timeout,
+                reply_complete=reply_complete,
+            )
+
+    def _wait_for_notification_blocking(
+        self,
+        label: str,
+        match: Callable[[bytes], bool],
+        timeout: float,
+        required: bool,
+    ) -> bytes | None:
+        if not self._sock or not self._connected or self._transport != DeviceTransport.BLE:
+            if required:
+                raise RuntimeError("BLE notification wait unavailable")
+            return None
+        waiter = getattr(self._sock, "wait_for_notification", None)
+        if not callable(waiter):
+            if required:
+                raise RuntimeError("BLE notification wait unavailable")
+            return None
+        return waiter(label, match, timeout=timeout, required=required)
+
+    def _send_control_packet_wait_notification_blocking(
+        self,
+        packet: bytes,
+        label: str,
+        match: Callable[[bytes], bool],
+        timeout: float,
+        required: bool,
+    ) -> bytes | None:
+        if not self._sock or not self._connected or self._transport != DeviceTransport.BLE:
+            if required:
+                raise RuntimeError("BLE notification query unavailable")
+            return None
+        sender = getattr(self._sock, "send_control_packet_wait_notification", None)
+        if not callable(sender):
+            if required:
+                raise RuntimeError("BLE notification query unavailable")
+            return None
+        with self._lock:
+            return sender(
+                packet,
+                label=label,
+                match=match,
+                timeout=timeout,
+                required=required,
+            )
+
     def _write_blocking(
         self,
         data: bytes,
         chunk_size: int,
         delay_ms: int,
-        runtime_controller=None,
         interval_ms: Optional[int] = None,
     ) -> None:
         if interval_ms is not None and not delay_ms:
@@ -296,7 +544,7 @@ class SppBackend:
 
         if self._transport == DeviceTransport.BLE:
             with self._lock:
-                _send_all(self._sock, data, runtime_controller=runtime_controller)
+                _send_all(self._sock, data)
             return
 
         delay = max(0.0, delay_ms / 1000.0)
@@ -397,10 +645,10 @@ def _safe_close(sock: Optional[SocketLike]) -> None:
         pass
 
 
-def _send_all(sock: SocketLike, data: bytes, runtime_controller=None) -> None:
+def _send_all(sock: SocketLike, data: bytes) -> None:
     send_payload = getattr(sock, "send_payload", None)
     if callable(send_payload):
-        send_payload(data, runtime_controller=runtime_controller)
+        send_payload(data)
         return
     sendall = getattr(sock, "sendall", None)
     if callable(sendall):
@@ -415,6 +663,78 @@ def _send_all(sock: SocketLike, data: bytes, runtime_controller=None) -> None:
         if not sent:
             raise RuntimeError("Bluetooth send failed")
         offset += sent
+
+
+def _recv_until_match_or_timeout(
+    sock: SocketLike,
+    *,
+    timeout: float,
+    reply_complete: Callable[[bytes], bool] | None = None,
+) -> bytes | None:
+    recv = getattr(sock, "recv", None)
+    if not callable(recv):
+        return None
+    settimeout = getattr(sock, "settimeout", None)
+    gettimeout = getattr(sock, "gettimeout", None)
+    previous_timeout = None
+    if callable(gettimeout):
+        try:
+            previous_timeout = gettimeout()
+        except Exception:
+            previous_timeout = None
+    deadline = time.monotonic() + max(0.0, timeout)
+    chunks = bytearray()
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            if callable(settimeout):
+                settimeout(remaining)
+            try:
+                chunk = recv(4096)
+            except Exception as exc:
+                if _is_timeout_error(exc):
+                    break
+                raise
+            if not chunk:
+                break
+            chunks.extend(chunk)
+            if reply_complete is not None and reply_complete(bytes(chunks)):
+                break
+    finally:
+        if callable(settimeout):
+            try:
+                settimeout(previous_timeout)
+            except Exception:
+                pass
+    return bytes(chunks) if chunks else None
+
+
+def _send_control_packet(
+    sock: SocketLike,
+    packet: bytes,
+    *,
+    timeout: float,
+) -> bool:
+    _ = timeout
+    _send_all(sock, packet)
+    return True
+
+
+def _query_control_packet(
+    sock: SocketLike,
+    packet: bytes,
+    *,
+    timeout: float,
+    reply_complete: Callable[[bytes], bool] | None = None,
+) -> bytes | None:
+    _send_all(sock, packet)
+    return _recv_until_match_or_timeout(
+        sock,
+        timeout=timeout,
+        reply_complete=reply_complete,
+    )
 
 
 def _is_timeout_error(exc: Exception) -> bool:

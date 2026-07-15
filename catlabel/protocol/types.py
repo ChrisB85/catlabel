@@ -19,10 +19,15 @@ class ImageEncoding(str, Enum):
     V5C_A4 = "v5c_a4"
     V5C_A5 = "v5c_a5"
     DCK_DEFAULT = "dck_default"
+    ELEPH_HPRT_ESC_RASTER = "eleph_hprt_esc_raster"
+    ELEPH_TSPL_BITMAP = "eleph_tspl_bitmap"
+    INSTAPRINT_CORE_RASTER = "instaprint_core_raster"
+    FUNNY_LX_RASTER = "funny_lx_raster"
 
 
 class PaperMode(str, Enum):
     PLAIN = "plain"
+    A4_SHEET = "a4_sheet"
     TAG = "tag"
     BLACK_TAG = "black_tag"
     FOLDER = "folder"
@@ -33,6 +38,7 @@ class PaperMode(str, Enum):
     def label(self) -> str:
         labels = {
             PaperMode.PLAIN: "Plain roll",
+            PaperMode.A4_SHEET: "A4 sheet",
             PaperMode.TAG: "Tag",
             PaperMode.BLACK_TAG: "Black tag",
             PaperMode.FOLDER: "Folder",

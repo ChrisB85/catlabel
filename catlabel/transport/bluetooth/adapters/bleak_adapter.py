@@ -1,11 +1,12 @@
 """Bluetooth Low Energy adapter using bleak for BLE communication.
 
 The adapter keeps connection lifecycle in `_BleakSocket` and delegates endpoint
-binding plus family-aware write routing to `_BleakTransportSession`.
+binding plus byte-transfer policy to `_BleakTransportSession`.
 """
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from typing import Any, Dict, List, Optional, Tuple
 
 from .base import _BleBluetoothAdapter
@@ -14,8 +15,7 @@ from .bleak_adapter_transport import _BleakTransportSession
 from ..constants import IS_MACOS
 from ..types import DeviceInfo, DeviceTransport, SocketLike
 from .... import reporting
-from ....protocol.families import get_protocol_behavior
-from ....protocol.family import ProtocolFamily
+from ....devices import BleTransportProfile, get_ble_transport_profile
 
 
 def _missing_bleak_error() -> RuntimeError:
@@ -27,14 +27,14 @@ def _missing_bleak_error() -> RuntimeError:
 class _BleakSocket:
     """Socket-like wrapper around a bleak BLE client.
 
-    It owns connection setup/teardown and uses `_BleakTransportSession` for the
-    protocol-specific parts of write routing and notify handling.
+        It owns connection setup/teardown and uses `_BleakTransportSession` for
+        characteristic selection, byte routing, and notification delivery.
     """
 
     def __init__(
         self,
         pairing_hint: Optional[bool] = None,
-        protocol_family: Optional[ProtocolFamily] = None,
+        ble_profile: Optional[BleTransportProfile] = None,
         reporter: reporting.Reporter = reporting.DUMMY_REPORTER,
         device_cache: Optional[Dict[str, Any]] = None,
     ) -> None:
@@ -45,13 +45,12 @@ class _BleakSocket:
         self._mtu_size = 180
         self._timeout = 30.0
         self._pairing_hint = pairing_hint is True and not IS_MACOS
-        self._protocol_family = protocol_family
+        self._ble_profile = ble_profile or get_ble_transport_profile(None)
         self._reporter = reporter
         self._device_cache = device_cache if device_cache is not None else {}
         self._write_resolver = _BleWriteEndpointResolver(reporter=self._reporter)
         self._transport = _BleakTransportSession(
-            protocol_family=self._protocol_family_or_default(),
-            transport_profile=get_protocol_behavior(self._protocol_family_or_default()).transport,
+            transport_profile=self._ble_profile,
             write_resolver=self._write_resolver,
             reporter=self._reporter,
         )
@@ -169,12 +168,16 @@ class _BleakSocket:
         """Resolve the primary writable characteristic for this connection."""
         if not self._client or not self._connected:
             return None
-        return self._write_resolver.resolve(self._client.services)
+        return self._write_resolver.resolve(
+            self._client.services,
+            preferred_service_uuid=self._ble_profile.preferred_service_uuid,
+            preferred_write_char_uuid=self._ble_profile.preferred_write_char_uuid,
+        )
 
     def send(self, data: bytes) -> int:
         return self.send_payload(data)
 
-    def send_payload(self, data: bytes, runtime_controller=None) -> int:
+    def send_payload(self, data: bytes) -> int:
         """Send one payload using the active BLE transport session."""
         if not self._connected or not self._client:
             raise RuntimeError("Not connected to BLE device")
@@ -182,7 +185,7 @@ class _BleakSocket:
             raise RuntimeError("Event loop not initialized")
 
         try:
-            self._loop.run_until_complete(self._send_async(data, runtime_controller=runtime_controller))
+            self._loop.run_until_complete(self._send_async(data))
             return len(data)
         except Exception as exc:
             bindings = self._transport.bindings
@@ -196,14 +199,165 @@ class _BleakSocket:
         """Compatibility alias matching socket-style APIs."""
         self.send_payload(data)
 
-    async def _send_async(self, data: bytes, runtime_controller=None) -> None:
+    def attach_runtime_controller(
+        self,
+        runtime_controller,
+        *,
+        timeout: float = 1.0,
+    ) -> None:
+        if not self._connected or not self._client:
+            raise RuntimeError("Not connected to BLE device")
+        if not self._loop:
+            raise RuntimeError("Event loop not initialized")
+        self._loop.run_until_complete(
+            self._transport.attach_runtime_controller(
+                runtime_controller,
+                mtu_size=self._mtu_size,
+                timeout=timeout,
+            )
+        )
+
+    def can_send_control_packet(self) -> bool:
+        return bool(
+            self._connected
+            and self._client
+            and self._transport.can_send_control_packet()
+        )
+
+    def send_control_packet(
+        self,
+        packet: bytes,
+        *,
+        timeout: float = 1.0,
+    ) -> bool:
+        if not self.can_send_control_packet():
+            return False
+        if not self._loop:
+            raise RuntimeError("Event loop not initialized")
+        return bool(
+            self._loop.run_until_complete(
+                self._transport.send_control_packet(packet, timeout=timeout)
+            )
+        )
+
+    def can_send_bulk_payload(self) -> bool:
+        return bool(
+            self._connected
+            and self._client
+            and self._transport.can_send_bulk_payload()
+        )
+
+    def send_bulk_payload(
+        self,
+        data: bytes,
+        *,
+        timeout: float = 1.0,
+    ) -> bool:
+        if not self.can_send_bulk_payload():
+            return False
+        if not self._loop:
+            raise RuntimeError("Event loop not initialized")
+        return bool(
+            self._loop.run_until_complete(
+                self._transport.send_bulk_payload(data, timeout=timeout)
+            )
+        )
+
+    def can_query_control_packet(self) -> bool:
+        return bool(
+            self._connected
+            and self._client
+            and self._transport.can_query_control_packet()
+        )
+
+    def query_control_packet(
+        self,
+        packet: bytes,
+        *,
+        timeout: float = 1.0,
+        reply_complete: Callable[[bytes], bool] | None = None,
+    ) -> bytes | None:
+        if not self.can_query_control_packet():
+            return None
+        if not self._loop:
+            raise RuntimeError("Event loop not initialized")
+        return self._loop.run_until_complete(
+            self._transport.query_control_packet(
+                packet,
+                timeout=timeout,
+                reply_complete=reply_complete,
+            )
+        )
+
+    def can_wait_for_notification(self) -> bool:
+        return bool(
+            self._connected
+            and self._client
+            and self._transport.can_wait_for_notification()
+        )
+
+    def wait_for_notification(
+        self,
+        label: str,
+        match: Callable[[bytes], bool],
+        *,
+        timeout: float,
+        required: bool = True,
+    ) -> bytes | None:
+        if not self._connected or not self._client:
+            if required:
+                raise RuntimeError("Not connected to BLE device")
+            return None
+        if not self._loop:
+            raise RuntimeError("Event loop not initialized")
+        return self._loop.run_until_complete(
+            self._transport.wait_for_notification(
+                label,
+                match,
+                timeout=timeout,
+                required=required,
+            )
+        )
+
+    def can_send_control_packet_wait_notification(self) -> bool:
+        return bool(
+            self._connected
+            and self._client
+            and self._transport.can_send_control_packet_wait_notification()
+        )
+
+    def send_control_packet_wait_notification(
+        self,
+        packet: bytes,
+        *,
+        label: str,
+        match: Callable[[bytes], bool],
+        timeout: float,
+        required: bool = True,
+    ) -> bytes | None:
+        if not self.can_send_control_packet_wait_notification():
+            if required:
+                raise RuntimeError("BLE notification query unavailable")
+            return None
+        if not self._loop:
+            raise RuntimeError("Event loop not initialized")
+        return self._loop.run_until_complete(
+            self._transport.send_control_packet_wait_notification(
+                packet,
+                label=label,
+                match=match,
+                timeout=timeout,
+                required=required,
+            )
+        )
+
+    async def _send_async(self, data: bytes) -> None:
         """Delegate payload routing and chunking to the transport session."""
         await self._transport.send(
             self._client,
             data,
             mtu_size=self._mtu_size,
             timeout=self._timeout,
-            runtime_controller=runtime_controller,
         )
 
     async def _pair_if_supported(self) -> None:
@@ -233,8 +387,7 @@ class _BleakSocket:
         self._connected = False
         self._client = None
         self._transport = _BleakTransportSession(
-            protocol_family=self._protocol_family_or_default(),
-            transport_profile=get_protocol_behavior(self._protocol_family_or_default()).transport,
+            transport_profile=self._ble_profile,
             write_resolver=self._write_resolver,
             reporter=self._reporter,
         )
@@ -260,9 +413,6 @@ class _BleakSocket:
             except Exception:
                 pass
             self._loop = None
-
-    def _protocol_family_or_default(self) -> ProtocolFamily:
-        return ProtocolFamily.from_value(self._protocol_family)
 
     def _handle_notification(self, _sender: Any, data: Any) -> None:
         self._transport.handle_notification(bytes(data))
@@ -315,12 +465,12 @@ class _BleakBleAdapter(_BleBluetoothAdapter):
     def create_socket(
         self,
         pairing_hint: Optional[bool] = None,
-        protocol_family: Optional[ProtocolFamily] = None,
+        ble_profile: Optional[BleTransportProfile] = None,
         reporter: reporting.Reporter = reporting.DUMMY_REPORTER,
     ) -> SocketLike:
         return _BleakSocket(
             pairing_hint=pairing_hint,
-            protocol_family=protocol_family,
+            ble_profile=ble_profile,
             reporter=reporter,
             device_cache=self._device_cache,
         )

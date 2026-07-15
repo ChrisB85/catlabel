@@ -11,19 +11,16 @@ class ProtocolCommandSet(str, Enum):
     V5X = "v5x"
     V5C = "v5c"
     DCK = "dck"
-
-
-class ProtocolTransportStyle(str, Enum):
-    STANDARD = "standard"
-    SPLIT_BULK = "split_bulk"
-    FLOW_CONTROLLED = "flow_controlled"
+    ELEPH_HPRT_ESC = "eleph_hprt_esc"
+    ELEPH_TSPL = "eleph_tspl"
+    INSTAPRINT_CORE = "instaprint_core"
+    FUNNY_LX = "funny_lx"
 
 
 @dataclass(frozen=True)
 class ProtocolSpec:
     packet_prefix: bytes | None
     command_set: ProtocolCommandSet
-    transport_style: ProtocolTransportStyle
 
 
 class ProtocolFamily(str, Enum):
@@ -35,6 +32,10 @@ class ProtocolFamily(str, Enum):
     V5X = "v5x"
     V5C = "v5c"
     DCK = "dck"
+    ELEPH_HPRT_ESC = "eleph_hprt_esc"
+    ELEPH_TSPL = "eleph_tspl"
+    INSTAPRINT_CORE = "instaprint_core"
+    FUNNY_LX = "funny_lx"
 
     @classmethod
     def from_value(cls, value: "ProtocolFamily | str | None") -> "ProtocolFamily":
@@ -67,7 +68,3 @@ class ProtocolFamily(str, Enum):
     @property
     def command_set(self) -> ProtocolCommandSet:
         return self.spec.command_set
-
-    @property
-    def transport_style(self) -> ProtocolTransportStyle:
-        return self.spec.transport_style

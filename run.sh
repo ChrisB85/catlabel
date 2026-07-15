@@ -48,8 +48,8 @@ if [ ! -d "env" ]; then
         chmod +x bin/micromamba
     fi
 
-    echo "[2/3] Creating isolated environment (Python 3.11, python-lzo)..."
-    ./bin/micromamba create -p ./env -c conda-forge python=3.11 pip git python-lzo -y
+    echo "[2/3] Creating isolated environment (Python 3.11)..."
+    ./bin/micromamba create -p ./env -c conda-forge python=3.11 pip git -y
 
     echo "[3/3] Installing backend dependencies..."
     ./bin/micromamba run -p ./env python -m pip install -r requirements.txt

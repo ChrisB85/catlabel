@@ -6,13 +6,80 @@ from PIL import Image
 from ..base import BasePrinterClient
 from .models import PrinterModelRegistry
 
-from ...protocol._builders import _build_job_from_raster_set
+from ... import reporting
+from ...devices import get_ble_transport_profile
+from ...printing import build_raster_job, send_prepared_job
+from ...printing.runtime.base import PreparedRuntimeContext
+from ...printing.runtime.factory import runtime_controller_for_device
+from ...printing.runtime.session import RuntimeConnectionSession
 from ...protocol.family import ProtocolFamily
-from ...protocol.types import PaperMode
+from ...protocol.job import ProtocolJob
+from ...protocol.types import ImageEncoding, ImagePipelineConfig, PaperMode
 from ...rendering.renderer import image_to_raster
 from ...transport.bluetooth import DeviceInfo, SppBackend
 from ...transport.bluetooth.types import DeviceTransport
-from ...raster import RasterSet
+from ...raster import PixelFormat, RasterSet
+
+
+class _GenericBackendConnection:
+    """Expose SppBackend through the printing runtime connection contract."""
+
+    def __init__(self, backend: SppBackend, *, chunk_size: int, delay_ms: int) -> None:
+        self._backend = backend
+        self._chunk_size = chunk_size
+        self._delay_ms = delay_ms
+
+    async def attach_runtime_controller(self, controller, *, timeout: float = 1.0) -> None:
+        attach = getattr(self._backend, "attach_runtime_controller", None)
+        if callable(attach):
+            await attach(controller, timeout=timeout)
+
+    def can_send_control_packet(self) -> bool:
+        checker = getattr(self._backend, "can_send_control_packet", None)
+        return bool(checker()) if callable(checker) else False
+
+    def can_send_bulk_payload(self) -> bool:
+        checker = getattr(self._backend, "can_send_bulk_payload", None)
+        return bool(checker()) if callable(checker) else False
+
+    def can_query_control_packet(self) -> bool:
+        checker = getattr(self._backend, "can_query_control_packet", None)
+        return bool(checker()) if callable(checker) else False
+
+    def can_wait_for_notification(self) -> bool:
+        checker = getattr(self._backend, "can_wait_for_notification", None)
+        return bool(checker()) if callable(checker) else False
+
+    def can_send_control_packet_wait_notification(self) -> bool:
+        checker = getattr(self._backend, "can_send_control_packet_wait_notification", None)
+        return bool(checker()) if callable(checker) else False
+
+    async def send_control_packet(self, packet: bytes, *, timeout: float = 1.0) -> bool:
+        return await self._backend.send_control_packet(packet, timeout=timeout)
+
+    async def send_bulk_payload(self, data: bytes, *, timeout: float = 1.0) -> bool:
+        return await self._backend.send_bulk_payload(data, timeout=timeout)
+
+    async def query_control_packet(self, packet: bytes, **kwargs):
+        return await self._backend.query_control_packet(packet, **kwargs)
+
+    async def wait_for_notification(self, label, match, **kwargs):
+        return await self._backend.wait_for_notification(label, match, **kwargs)
+
+    async def send_control_packet_wait_notification(self, packet: bytes, **kwargs):
+        return await self._backend.send_control_packet_wait_notification(packet, **kwargs)
+
+    async def send_standard_payload(self, data: bytes) -> None:
+        await self._backend.write(
+            data,
+            chunk_size=self._chunk_size,
+            delay_ms=self._delay_ms,
+        )
+
+    async def send(self, job: ProtocolJob) -> None:
+        if job.steps:
+            raise RuntimeError("Interactive jobs must be executed by the printing layer")
+        await self.send_standard_payload(job.payload)
 
 class GenericClient(BasePrinterClient):
     def __init__(self, device, hardware_info, printer_profile, settings):
@@ -34,6 +101,7 @@ class GenericClient(BasePrinterClient):
 
         if not self.model:
             self.model = self.registry.get("GT01")
+        self._runtime_context = PreparedRuntimeContext()
 
     def _effective_protocol_family(self):
         if self.model_match is not None:
@@ -57,7 +125,20 @@ class GenericClient(BasePrinterClient):
     async def connect(self) -> bool:
         attempts = []
         prefer_spp = getattr(self.model, "use_spp", False)
-        ordered = [DeviceTransport.CLASSIC, DeviceTransport.BLE] if prefer_spp else [DeviceTransport.BLE, DeviceTransport.CLASSIC]
+        family = self._effective_protocol_family()
+        variant = self._effective_protocol_variant()
+        if family.value == "funny_lx":
+            # Funny LX cannot operate without its BLE notification endpoint.
+            ordered = [DeviceTransport.BLE]
+        elif (
+            family is ProtocolFamily.LUCK_NORMAL
+            and variant in {"lujiang_normal", "lujiang_normal_h"}
+        ):
+            # Lujiang request/reply is socket based; the BLE adapter has no
+            # read characteristic for these models.
+            ordered = [DeviceTransport.CLASSIC]
+        else:
+            ordered = [DeviceTransport.CLASSIC, DeviceTransport.BLE] if prefer_spp else [DeviceTransport.BLE, DeviceTransport.CLASSIC]
 
         for transport in ordered:
             attempts.append(
@@ -66,7 +147,11 @@ class GenericClient(BasePrinterClient):
                     address=self.device.address,
                     paired=getattr(self.device, "paired", None),
                     transport=transport,
-                    protocol_family=self._effective_protocol_family() if self.model else None,
+                    ble_profile=(
+                        get_ble_transport_profile(self._effective_protocol_family())
+                        if self.model
+                        else None
+                    ),
                 )
             )
 
@@ -92,7 +177,16 @@ class GenericClient(BasePrinterClient):
         if not self.model:
             raise HTTPException(status_code=500, detail="Unable to resolve printer model.")
 
-        print_width_px = self.hardware_info["width_px"]
+        requested_paper_mode = getattr(self.printer_profile, "paper_mode", None)
+        selected_paper = next(
+            (
+                preset
+                for preset in self.model.paper_presets
+                if requested_paper_mode and preset.paper_mode == requested_paper_mode
+            ),
+            self.model.paper_preset(),
+        )
+        print_width_px = selected_paper.render_width_px
         final_images = []
 
         for img in images:
@@ -145,63 +239,6 @@ class GenericClient(BasePrinterClient):
             use_energy = max(min_allowed_energy, min(int(resolved_energy or hardware_default_energy), max_allowed_energy))
         use_feed = self.printer_profile.feed_lines if self.printer_profile and self.printer_profile.feed_lines is not None else self.settings.feed_lines
 
-        runtime_controller = None
-        if hasattr(self.model, "protocol_family"):
-            family_val = protocol_family.value if hasattr(protocol_family, "value") else str(protocol_family)
-            
-            if family_val == "v5g":
-                from ...printing.runtime.v5g import V5GRuntimeController
-                runtime_controller = V5GRuntimeController(
-                    helper_kind=getattr(self.model, "runtime_variant", None),
-                    density_profile_key=getattr(self.model, "runtime_density_profile_key", None),
-                    density_profile=None 
-                )
-            elif family_val == "v5x":
-                from ...printing.runtime.v5x import V5XRuntimeController
-                runtime_controller = V5XRuntimeController()
-            elif family_val == "v5c":
-                from ...printing.runtime.v5c import V5CRuntimeController
-                runtime_controller = V5CRuntimeController()
-
-        jobs = []
-        total_images = len(final_images)
-        supported_paper_modes = self.hardware_info.get("supported_paper_modes") or []
-        supported_paper_values = {str(item.get("value")) for item in supported_paper_modes if isinstance(item, dict) and item.get("value")}
-        paper_mode_value = getattr(self.printer_profile, "paper_mode", None)
-        if paper_mode_value and supported_paper_values and paper_mode_value not in supported_paper_values:
-            paper_mode_value = None
-        if paper_mode_value and not supported_paper_values:
-            paper_mode_value = None
-        paper_mode = PaperMode(paper_mode_value) if paper_mode_value else None
-        total_pages = len(final_images)
-        for index, img in enumerate(final_images):
-            is_last = index == total_images - 1
-            current_feed = use_feed if is_last else 0
-
-            raster = image_to_raster(img, pipeline_config.default_format, dither=dither)
-            raster_set = RasterSet.from_single(raster)
-            
-            job_bytes = _build_job_from_raster_set(
-                raster_set=raster_set,
-                is_text=False,
-                speed=use_speed,
-                energy=use_energy,
-                density=use_density,
-                blackening=use_density if use_density is not None else 3,
-                lsb_first=not self.model.a4xii,
-                protocol_family=protocol_family,
-                protocol_variant=protocol_variant,
-                feed_padding=current_feed,
-                dev_dpi=self.model.dev_dpi,
-                can_print_label=self.model.can_print_label,
-                post_print_feed_count=0,
-                image_pipeline=pipeline_config,
-                paper_mode=paper_mode,
-                page_index=index + 1,
-                page_count=total_pages,
-            )
-            jobs.append(job_bytes)
-
         delay_ms = getattr(self.model, "interval_ms", getattr(self.model, "delay_ms", 4))
         try:
             delay_ms = int(delay_ms or 4)
@@ -215,8 +252,86 @@ class GenericClient(BasePrinterClient):
         if mtu <= 0:
             mtu = 128
 
-        for index, job_bytes in enumerate(jobs):
-            await self.backend.write(job_bytes, chunk_size=mtu, interval_ms=delay_ms)
+        runtime_controller = runtime_controller_for_device(
+            self.model,
+            protocol_family=protocol_family,
+            bluetooth_address=getattr(self.device, "address", ""),
+        )
+
+        connection = _GenericBackendConnection(
+            self.backend,
+            chunk_size=mtu,
+            delay_ms=delay_ms,
+        )
+        runtime_context = PreparedRuntimeContext(runtime_controller=runtime_controller)
+        if runtime_controller is not None:
+            runtime_session = RuntimeConnectionSession(
+                connection,
+                reporter=reporting.DUMMY_REPORTER,
+            )
+            await runtime_session.attach_runtime_controller(runtime_controller, timeout=1.0)
+            await runtime_controller.probe_capabilities(runtime_session, timeout=1.0)
+            runtime_context = PreparedRuntimeContext(
+                runtime_controller=runtime_controller,
+                capabilities=runtime_controller.runtime_capabilities(),
+            )
+        self._runtime_context = runtime_context
+        if (
+            runtime_context.capabilities is not None
+            and runtime_context.capabilities.supports_gray is False
+            and pipeline_config.encoding is ImageEncoding.LUCK_NORMAL_GRAY
+        ):
+            pipeline_config = ImagePipelineConfig(
+                formats=(PixelFormat.BW1,),
+                encoding=ImageEncoding.LUCK_NORMAL_RAW,
+            )
+
+        jobs = []
+        total_images = len(final_images)
+        paper_mode = PaperMode(selected_paper.paper_mode) if selected_paper.paper_mode else None
+        total_pages = len(final_images)
+        for index, img in enumerate(final_images):
+            is_last = index == total_images - 1
+            current_feed = use_feed if is_last else 0
+
+            raster = image_to_raster(img, pipeline_config.default_format, dither=dither)
+            raster_set = RasterSet.from_single(raster)
+            
+            job = build_raster_job(
+                model=self.model,
+                raster_set=raster_set,
+                is_text=False,
+                speed=use_speed,
+                energy=use_energy,
+                density=use_density,
+                blackening=use_density if use_density is not None else 3,
+                feed_padding=current_feed,
+                image_pipeline=pipeline_config,
+                paper_mode=paper_mode,
+                paper_width_pixels=selected_paper.paper_width_px,
+                page_index=index + 1,
+                page_count=total_pages,
+                left_padding_pixels=selected_paper.left_padding_px,
+                a4_sheet_max_height=selected_paper.max_height_px,
+                protocol_family=protocol_family,
+                protocol_variant=protocol_variant,
+                runtime_capabilities=runtime_context.capabilities,
+            )
+            jobs.append(job)
+
+        for index, job in enumerate(jobs):
+            # Completion is only needed after the final page; intermediate
+            # pages keep the connection and runtime state live.
+            if index < len(jobs) - 1 and job.wait_for_completion:
+                job = ProtocolJob(payload=job.payload, steps=job.steps)
+            await send_prepared_job(
+                self.model,
+                connection,
+                job,
+                timeout=1.0,
+                reporter=reporting.DUMMY_REPORTER,
+                runtime_context=runtime_context,
+            )
 
             if index < len(jobs) - 1:
                 await asyncio.sleep(1.5)

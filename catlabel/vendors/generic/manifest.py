@@ -17,11 +17,30 @@ class GenericManifest(VendorManifest):
 
     def _build_capabilities(self, raw_info: dict) -> dict:
         protocol_family = str(raw_info.get("protocol_family") or "").lower()
-        if protocol_family in {"luck_normal", "luck_normal_a4"}:
+        if protocol_family in {
+            "luck_normal",
+            "luck_normal_a4",
+            "v5g",
+            "v5x",
+            "v5c",
+        }:
+            if protocol_family == "v5g":
+                density_max = int(raw_info.get("max_density") or 200)
+                density_default = int(
+                    raw_info.get("default_density") or min(100, density_max)
+                )
+            else:
+                density_max = 5
+                density_default = 3
             return {
                 "speed": {"available": False},
                 "energy": {"available": False},
-                "density": {"available": True, "min": 0, "max": 5, "default": 1},
+                "density": {
+                    "available": True,
+                    "min": 1,
+                    "max": density_max,
+                    "default": density_default,
+                },
                 "feed": {"available": True, "default": 0},
             }
         return {

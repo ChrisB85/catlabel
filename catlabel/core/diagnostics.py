@@ -63,9 +63,6 @@ def collect_dependency_warnings() -> List[str]:
                     "Missing pyobjc-framework-IOBluetooth. "
                     "macOS Classic Bluetooth SPP scanning/connection will not work."
                 )
-        elif requirement == "python-lzo":
-            if not _has_module("lzo"):
-                warnings.append("Missing dependency: python-lzo.")
         elif not _has_module(_IMPORT_NAMES.get(requirement, requirement)):
             warnings.append(f"Missing dependency: {requirement}.")
     return warnings

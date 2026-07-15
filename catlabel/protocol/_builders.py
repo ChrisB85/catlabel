@@ -13,14 +13,20 @@ from .commands import (
 from .encoding import build_line_packets
 from .families import PrintJobRequest, get_protocol_behavior
 from .family import ProtocolFamily
+from .plan import ProtocolPlan
+from .runtime import RuntimePrintCapabilities
+from .steps import ProtocolStep
 from .types import ImagePipelineConfig, PaperMode
 
 
-def _build_family_job(request: PrintJobRequest) -> bytes | None:
+def _build_family_job(request: PrintJobRequest) -> ProtocolPlan | None:
     behavior = get_protocol_behavior(request.protocol_family)
     if behavior.job_builder is None:
         return None
-    return behavior.job_builder(request)
+    result = behavior.job_builder(request)
+    if result is None or isinstance(result, ProtocolPlan):
+        return result
+    return ProtocolPlan.stream(result)
 
 
 def _resolve_image_pipeline(
@@ -88,6 +94,11 @@ def _build_request(
     paper_mode: PaperMode | None = None,
     page_index: int = 1,
     page_count: int = 1,
+    left_padding_pixels: int = 0,
+    one_length: int = 0,
+    a4xii: bool = False,
+    a4_sheet_max_height: int | None = None,
+    runtime_capabilities: RuntimePrintCapabilities | None = None,
 ) -> PrintJobRequest:
     family = ProtocolFamily.from_value(protocol_family)
     request = PrintJobRequest(
@@ -108,6 +119,11 @@ def _build_request(
         paper_mode=paper_mode,
         page_index=page_index,
         page_count=page_count,
+        left_padding_pixels=left_padding_pixels,
+        one_length=one_length,
+        a4xii=a4xii,
+        a4_sheet_max_height=a4_sheet_max_height,
+        runtime_capabilities=runtime_capabilities,
     )
     _validate_request(request)
     return request
@@ -240,6 +256,10 @@ def _build_job(
     protocol_variant: str | None = None,
     page_index: int = 1,
     page_count: int = 1,
+    left_padding_pixels: int = 0,
+    one_length: int = 0,
+    a4xii: bool = False,
+    a4_sheet_max_height: int | None = None,
 ) -> bytes:
     raster = RasterBuffer(pixels=pixels, width=width, pixel_format=PixelFormat.BW1)
     return _build_job_from_raster(
@@ -260,6 +280,10 @@ def _build_job(
         paper_mode=paper_mode,
         page_index=page_index,
         page_count=page_count,
+        left_padding_pixels=left_padding_pixels,
+        one_length=one_length,
+        a4xii=a4xii,
+        a4_sheet_max_height=a4_sheet_max_height,
     )
 
 
@@ -281,6 +305,10 @@ def _build_job_from_raster(
     protocol_variant: str | None = None,
     page_index: int = 1,
     page_count: int = 1,
+    left_padding_pixels: int = 0,
+    one_length: int = 0,
+    a4xii: bool = False,
+    a4_sheet_max_height: int | None = None,
 ) -> bytes:
     return _build_job_from_raster_set(
         raster_set=RasterSet.from_single(raster),
@@ -300,6 +328,10 @@ def _build_job_from_raster(
         paper_mode=paper_mode,
         page_index=page_index,
         page_count=page_count,
+        left_padding_pixels=left_padding_pixels,
+        one_length=one_length,
+        a4xii=a4xii,
+        a4_sheet_max_height=a4_sheet_max_height,
     )
 
 
@@ -321,7 +353,61 @@ def _build_job_from_raster_set(
     protocol_variant: str | None = None,
     page_index: int = 1,
     page_count: int = 1,
+    left_padding_pixels: int = 0,
+    one_length: int = 0,
+    a4xii: bool = False,
+    a4_sheet_max_height: int | None = None,
 ) -> bytes:
+    payload, _steps = _build_job_model_from_raster_set(
+        raster_set=raster_set,
+        is_text=is_text,
+        speed=speed,
+        energy=energy,
+        density=density,
+        blackening=blackening,
+        lsb_first=lsb_first,
+        protocol_family=protocol_family,
+        feed_padding=feed_padding,
+        dev_dpi=dev_dpi,
+        can_print_label=can_print_label,
+        post_print_feed_count=post_print_feed_count,
+        image_pipeline=image_pipeline,
+        paper_mode=paper_mode,
+        protocol_variant=protocol_variant,
+        page_index=page_index,
+        page_count=page_count,
+        left_padding_pixels=left_padding_pixels,
+        one_length=one_length,
+        a4xii=a4xii,
+        a4_sheet_max_height=a4_sheet_max_height,
+    )
+    return payload
+
+
+def _build_job_model_from_raster_set(
+    raster_set: RasterSet,
+    is_text: bool,
+    speed: int,
+    energy: int,
+    density: int | None,
+    blackening: int,
+    lsb_first: bool,
+    protocol_family: ProtocolFamily | str,
+    feed_padding: int,
+    dev_dpi: int,
+    can_print_label: bool = False,
+    post_print_feed_count: int = 2,
+    image_pipeline: ImagePipelineConfig | None = None,
+    paper_mode: PaperMode | None = None,
+    protocol_variant: str | None = None,
+    page_index: int = 1,
+    page_count: int = 1,
+    left_padding_pixels: int = 0,
+    one_length: int = 0,
+    a4xii: bool = False,
+    a4_sheet_max_height: int | None = None,
+    runtime_capabilities: RuntimePrintCapabilities | None = None,
+) -> tuple[bytes, tuple[ProtocolStep, ...]]:
     request = _build_request(
         raster_set=raster_set,
         is_text=is_text,
@@ -340,10 +426,15 @@ def _build_job_from_raster_set(
         paper_mode=paper_mode,
         page_index=page_index,
         page_count=page_count,
+        left_padding_pixels=left_padding_pixels,
+        one_length=one_length,
+        a4xii=a4xii,
+        a4_sheet_max_height=a4_sheet_max_height,
+        runtime_capabilities=runtime_capabilities,
     )
-    family_job = _build_family_job(request)
-    if family_job is not None:
-        return family_job
+    family_plan = _build_family_job(request)
+    if family_plan is not None:
+        return family_plan.payload, family_plan.steps
 
     job = bytearray()
     job += blackening_cmd(blackening, request.protocol_family)
@@ -367,4 +458,4 @@ def _build_job_from_raster_set(
         for _ in range(max(0, request.post_print_feed_count)):
             job += paper_cmd(request.dev_dpi, request.protocol_family)
     job += dev_state_cmd(request.protocol_family)
-    return bytes(job)
+    return bytes(job), ()

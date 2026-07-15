@@ -1,0 +1,101 @@
+from __future__ import annotations
+
+import unittest
+from collections import Counter
+
+from catlabel.protocol import ProtocolFamily
+from catlabel.vendors.generic.models import DetectionRule, PrinterModelRegistry
+
+
+class GenericCatalogTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.registry = PrinterModelRegistry.load()
+
+    def test_catalog_is_pinned_to_timiniprint_073(self) -> None:
+        self.assertEqual(
+            self.registry.source_metadata["commit"],
+            "3373a037ccbaafc32cfafd5ed9ef496efd1efacd",
+        )
+        self.assertEqual(self.registry.source_metadata["revision"], "v0.7.3")
+        self.assertEqual(self.registry.unsupported_model_count, 165)
+        self.assertEqual(self.registry.deferred_model_count, 11)
+
+    def test_only_executable_generic_profiles_are_advertised(self) -> None:
+        counts = Counter(model.protocol_family for model in self.registry.models)
+        self.assertEqual(len(self.registry.models), 132)
+        self.assertEqual(counts[ProtocolFamily.LEGACY], 79)
+        self.assertEqual(counts[ProtocolFamily.V5G], 14)
+        self.assertEqual(counts[ProtocolFamily.ELEPH_TSPL], 2)
+        self.assertEqual(counts[ProtocolFamily.ELEPH_HPRT_ESC], 1)
+        self.assertEqual(counts[ProtocolFamily.INSTAPRINT_CORE], 1)
+        self.assertEqual(counts[ProtocolFamily.FUNNY_LX], 1)
+        self.assertNotIn(ProtocolFamily.DCK, counts)
+
+    def test_mac_constrained_v5x_variant_beats_v5g_name(self) -> None:
+        ordinary = self.registry.detect_with_origin("MX10")
+        constrained = self.registry.detect_with_origin("MX10", "00:11:22:33:44:59")
+
+        self.assertIsNotNone(ordinary)
+        self.assertEqual(ordinary.protocol_family, ProtocolFamily.V5G)
+        self.assertIsNotNone(constrained)
+        self.assertEqual(constrained.protocol_family, ProtocolFamily.V5X)
+
+    def test_mac_constrained_rule_rejects_uuid_address(self) -> None:
+        match = self.registry.detect_with_origin(
+            "MX10",
+            "F4B3C8E3-C284-9C3A-C549-D786345CB559",
+        )
+
+        self.assertIsNotNone(match)
+        self.assertEqual(match.protocol_family, ProtocolFamily.V5G)
+
+    def test_detection_specificity_prefers_exact_for_equal_length(self) -> None:
+        exact = DetectionRule(display_name="exact", exact_names=("X6",))
+        prefix = DetectionRule(display_name="prefix", prefixes=("X6",))
+
+        self.assertGreater(
+            exact.match_score("X6", None, casefold=False),
+            prefix.match_score("X6", None, casefold=False),
+        )
+
+    def test_known_unsupported_models_are_not_claimed(self) -> None:
+        for name in (
+            "C21",
+            "D110",
+            "M02",
+        ):
+            with self.subTest(name=name):
+                self.assertIsNone(self.registry.detect_with_origin(name))
+
+    def test_new_runtime_and_protocol_families_are_claimed(self) -> None:
+        expected = {
+            "PPA2L_1234": ProtocolFamily.LUCK_NORMAL,
+            "PPA2LH_1234": ProtocolFamily.LUCK_NORMAL,
+            "CorePrint": ProtocolFamily.INSTAPRINT_CORE,
+            "LX-D01": ProtocolFamily.FUNNY_LX,
+            "P1_F30E": ProtocolFamily.ELEPH_TSPL,
+            "P11_F30E": ProtocolFamily.ELEPH_HPRT_ESC,
+        }
+        for name, family in expected.items():
+            with self.subTest(name=name):
+                match = self.registry.detect_with_origin(name)
+                self.assertIsNotNone(match)
+                self.assertEqual(match.protocol_family, family)
+
+    def test_new_family_detection_keeps_source_ambiguities_unresolved(self) -> None:
+        self.assertIsNone(self.registry.detect_with_origin("P1"))
+        self.assertIsNone(self.registry.detect_with_origin("P1-1234"))
+        self.assertIsNone(self.registry.detect_with_origin("YHK"))
+        self.assertIsNone(self.registry.detect_with_origin("LX-D02-60"))
+
+    def test_profile_exposes_paper_geometry_and_packet_variant(self) -> None:
+        model = self.registry.get("p4")
+        self.assertIsNotNone(model)
+        self.assertEqual(model.protocol_family, ProtocolFamily.LEGACY)
+        self.assertEqual(model.protocol_variant, "line_eight")
+        self.assertEqual(model.paper_preset("a4sheet_1600r_1624p_24pl").left_padding_px, 24)
+
+
+if __name__ == "__main__":
+    unittest.main()

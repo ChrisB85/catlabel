@@ -18,6 +18,15 @@ TAG_POSITION_RECIPE = LuckNormalModeRecipe(
     finish_action="position",
 )
 
+LUJIANG_NORMAL_MODE_RECIPES = {
+    PaperMode.PLAIN: LuckNormalModeRecipe(mark_last_scope="last_page"),
+    PaperMode.TAG: LuckNormalModeRecipe(
+        paper_mode=LuckNormalPaperMode.TAG,
+        finish_action="position",
+        mark_last_scope="last_page",
+    ),
+}
+
 QIRUI_MODE_RECIPES = {
     PaperMode.PLAIN: LuckNormalModeRecipe(),
     PaperMode.TAG: TAG_POSITION_RECIPE,
@@ -38,6 +47,15 @@ RECIPE = LuckNormalFamilyRecipe(
     end_line_dots_200dpi=80,
     end_line_dots_300dpi=120,
     variants={
+        "lujiang_normal": LuckNormalVariantRecipe(
+            mode_recipes=LUJIANG_NORMAL_MODE_RECIPES,
+            query_interleaved=True,
+        ),
+        "lujiang_normal_h": LuckNormalVariantRecipe(
+            mode_recipes=LUJIANG_NORMAL_MODE_RECIPES,
+            end_line_dots_300dpi=60,
+            query_interleaved=True,
+        ),
         "qirui_q1": LuckNormalVariantRecipe(
             dialect=LUCK_NORMAL_MODE2_DIALECT,
             mode_recipes=QIRUI_MODE_RECIPES,

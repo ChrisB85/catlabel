@@ -10,6 +10,7 @@ from ...rendering.renderer import image_to_raster
 from ...protocol.encoding import pack_line
 from ...transport.bluetooth import SppBackend, DeviceInfo, DeviceTransport
 from ...raster import PixelFormat
+from ...devices import get_ble_transport_profile
 
 
 class PhomemoClient(BasePrinterClient):
@@ -28,7 +29,7 @@ class PhomemoClient(BasePrinterClient):
                 address=address,
                 paired=getattr(self.device, "paired", None),
                 transport=DeviceTransport.BLE,
-                protocol_family=None,
+                ble_profile=get_ble_transport_profile("phomemo_esc"),
             )
         ]
         

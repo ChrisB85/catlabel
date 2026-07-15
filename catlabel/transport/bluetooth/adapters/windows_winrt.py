@@ -174,6 +174,14 @@ class _WinRtSocket:
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._socket = None
         self._writer = None
+        self._reader = None
+        self._timeout: float | None = None
+
+    def settimeout(self, timeout: float | None) -> None:
+        self._timeout = None if timeout is None else max(0.0, float(timeout))
+
+    def gettimeout(self) -> float | None:
+        return self._timeout
 
     def _run(self, coro: Awaitable[T]) -> T:
         if self._loop is None:
@@ -187,9 +195,15 @@ class _WinRtSocket:
         if not service:
             raise RuntimeError("Bluetooth SPP service not found for device")
         _, _, _, _, StreamSocket, DataWriter = _winrt_imports()
+        try:
+            from winsdk.windows.storage.streams import DataReader, InputStreamOptions
+        except Exception as exc:
+            raise RuntimeError(_winrt_missing_message()) from exc
         self._socket = StreamSocket()
         self._run(self._socket.connect_async(service.connection_host_name, service.connection_service_name))
         self._writer = DataWriter(self._socket.output_stream)
+        self._reader = DataReader(self._socket.input_stream)
+        self._reader.input_stream_options = InputStreamOptions.PARTIAL
 
     def sendall(self, data: bytes) -> None:
         if not self._writer:
@@ -198,7 +212,30 @@ class _WinRtSocket:
         self._run(self._writer.store_async())
         self._run(self._writer.flush_async())
 
+    def recv(self, size: int) -> bytes:
+        if not self._reader:
+            raise RuntimeError("Not connected to a Bluetooth SPP device")
+        return self._run(self._recv_async(max(1, int(size))))
+
+    async def _recv_async(self, size: int) -> bytes:
+        load = self._reader.load_async(size)
+        if self._timeout is None:
+            available = await load
+        else:
+            available = await asyncio.wait_for(load, timeout=self._timeout)
+        count = min(int(available or 0), size)
+        if count <= 0:
+            return b""
+        data = bytearray(count)
+        self._reader.read_bytes(data)
+        return bytes(data)
+
     def close(self) -> None:
+        if self._reader:
+            close_reader = getattr(self._reader, "close", None)
+            if callable(close_reader):
+                close_reader()
+            self._reader = None
         if self._writer:
             close_writer = getattr(self._writer, "close", None)
             if callable(close_writer):

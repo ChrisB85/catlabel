@@ -11,6 +11,13 @@ from .converters.base import Page
 from ..raster import PixelFormat, RasterBuffer, RasterSet
 
 
+def _flattened_data(image: Image.Image):
+    getter = getattr(image, "get_flattened_data", None)
+    if callable(getter):
+        return getter()
+    return image.getdata()
+
+
 def apply_page_transforms(pages: Sequence[Page], rotate_90_clockwise: bool = False) -> List[Page]:
     if not rotate_90_clockwise:
         return list(pages)
@@ -27,10 +34,10 @@ def apply_page_transforms(pages: Sequence[Page], rotate_90_clockwise: bool = Fal
 def image_to_bw_pixels(img: Image.Image, dither: bool) -> List[int]:
     if dither:
         img = img.convert("1")
-        data = list(img.getdata())
+        data = list(_flattened_data(img))
         return [1 if p == 0 else 0 for p in data]
     img = img.convert("L")
-    data = list(img.getdata())
+    data = list(_flattened_data(img))
     avg = sum(data) / len(data) if data else 0
     threshold = int(max(0, min(255, avg - 13)))
     return [1 if p <= threshold else 0 for p in data]
@@ -100,7 +107,7 @@ def _image_to_gray_values(
     gamma_value: float | None = None,
 ) -> List[int]:
     gray_image = _preprocess_gray_image(img, gamma_value) if gamma_handle else img.convert("L")
-    return list(gray_image.getdata())
+    return list(_flattened_data(gray_image))
 
 
 def image_to_gray_raster(

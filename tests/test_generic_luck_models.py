@@ -21,22 +21,24 @@ class GenericLuckModelTests(unittest.TestCase):
         self.assertEqual(match.protocol_family, family)
         self.assertEqual(match.protocol_variant, variant)
 
-    def test_luck_exact_names_do_not_shadow_more_specific_models(self) -> None:
-        self.assertDetected("A2", "luck_a2", ProtocolFamily.LUCK_NORMAL, None)
-        self.assertDetected("A2H", "luck_a2h", ProtocolFamily.LUCK_NORMAL, None)
+    def test_luck_detection_uses_source_backed_prefixes_only(self) -> None:
+        # A2/A2H are marketing names in the Luck source, not advertised-name
+        # triggers.  The Tiny source independently advertises A2/A3.
+        self.assertDetected("A2", "x16", ProtocolFamily.LEGACY, None)
+        self.assertDetected("A2H", "x16", ProtocolFamily.LEGACY, None)
         self.assertDetected("PPA2_1234", "luck_a2", ProtocolFamily.LUCK_NORMAL, None)
         self.assertDetected("PPA2H_1234", "luck_a2h", ProtocolFamily.LUCK_NORMAL, None)
 
     def test_luck_a4_aliases_resolve_to_protocol_variants(self) -> None:
         expected = {
             "APA49H_1234": ("luck_a49h", "a49h"),
-            "DP_ITP05_1234": ("luck_a4_compressed_tattoo", "a4_tattoo_64"),
-            "TPA46Pro_1234": ("luck_a4_compressed_tattoo_96_dense", "a4_tattoo_64_endline96"),
+            "DP_ITP05_1234": ("luck_itp05", "a4_tattoo_64"),
+            "TPA46Pro_1234": ("luck_itp06", "a4_tattoo_64_endline96"),
             "APL86H_1234": ("luck_apl86h", "apl86"),
             "DP_D80_1234": ("luck_d80", "d80"),
-            "DYD80H": ("luck_d80h", "d80h"),
-            "A80H-HD": ("luck_a80h_way1", "a80h_way1"),
-            "LuckP_A41_1234": ("luck_a41_luckp", "luckp_a41"),
+            "DP_D80H_1234": ("luck_d80h", "d80h"),
+            "DP_A80H_1234": ("luck_a80h_way1", "a80h_way1"),
+            "LuckP_A41_1234": ("luckp_a41", "luckp_a41"),
         }
         for name, (model_no, variant) in expected.items():
             with self.subTest(name=name):
@@ -52,9 +54,23 @@ class GenericLuckModelTests(unittest.TestCase):
         self.assertEqual([mode["value"] for mode in raw["supported_paper_modes"]], ["plain", "tag"])
 
     def test_unimplemented_luck_names_are_not_claimed(self) -> None:
-        for name in ("A49H", "D80H", "PPA2L_1234", "ITP05N"):
+        for name in ("A49H", "D80H", "ITP05N"):
             with self.subTest(name=name):
                 self.assertIsNone(self.registry.detect_with_origin(name))
+
+    def test_ppa2_variants_are_detected(self) -> None:
+        self.assertDetected(
+            "PPA2L_1234",
+            "luck_ppa2l",
+            ProtocolFamily.LUCK_NORMAL,
+            "lujiang_normal",
+        )
+        self.assertDetected(
+            "PPA2LH_1234",
+            "luck_ppa2lh",
+            ProtocolFamily.LUCK_NORMAL,
+            "lujiang_normal_h",
+        )
 
     def test_generic_manifest_reports_paper_modes_for_luck_models(self) -> None:
         manifest = GenericManifest()

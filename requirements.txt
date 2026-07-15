@@ -7,7 +7,6 @@ pypdfium2>=4.30.1
 bleak>=0.22.3
 crc8>=0.2.1
 pyserial>=3.5
-python-lzo ; sys_platform == "win32"
 pyobjc-framework-IOBluetooth>=11.0; sys_platform == "darwin"
 winsdk>=1.0.0b10; sys_platform == "win32"
 google-cloud-aiplatform

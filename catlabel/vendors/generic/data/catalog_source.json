@@ -1,0 +1,13 @@
+{
+  "repository": "https://github.com/Dejniel/TiMini-Print",
+  "revision": "v0.7.3",
+  "commit": "3373a037ccbaafc32cfafd5ed9ef496efd1efacd",
+  "license": "Apache-2.0",
+  "files": {
+    "catalog_models.json": "timiniprint/data/printer_models.json",
+    "catalog_unsupported.json": "timiniprint/data/printer_models_unsupported.json",
+    "catalog_profiles.json": "timiniprint/data/printer_profiles.json",
+    "catalog_paper_presets.json": "timiniprint/data/printer_paper_presets.json",
+    "catalog_origin_apps.json": "timiniprint/data/origin_apps.json"
+  }
+}

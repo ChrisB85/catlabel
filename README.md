@@ -20,7 +20,7 @@ CatLabel communicates directly with portable thermal printers over Bluetooth. It
 
 *   **Niimbot:** D-Series (D11, D110, D101), B-Series (B1, B21, B3S, B24, B18).
 *   **Phomemo:** M-Series (M02, M03, M04, M110, M200, M220), D-Series (D30), T02, P12, PM-241.
-*   **Generic:** Most generic portable printers (often sold as "Cat Printers" or "Mini Printers" using apps like Tiny Print, iBleem, WalkPrint, or Luck Jingle), including newly added Luck normal/A4 variants with paper-mode controls where supported.
+*   **Generic:** 132 source-backed model records from the TiMini-Print v0.7.3 catalog across Tiny/Tiny-prefixed, Luck (including PPA2L/PPA2LH), V5G/V5X/V5C, Eleph HPRT ESC, Eleph TSPL, Instaprint Core, and Funny LX families. Detection uses advertised names and MAC constraints from the catalog; models owned by the separate Niimbot and Phomemo backends are not duplicated.
 
 ---
 
@@ -129,8 +129,10 @@ In the **Canvas & Printer** tab, you can override default hardware behaviors:
 
 ## Architecture
 
-*   **Backend (`catlabel/`):** A FastAPI server that handles SQLite storage, Bluetooth communication (via `bleak` and OS-specific sockets), printer protocol encoding (V5, DCK, Legacy), and headless image rasterization.
+*   **Backend (`catlabel/`):** A FastAPI server with separate device policy, printing runtime, stateless protocol encoding, and Bluetooth transport layers. Generic printer metadata is a reproducible snapshot pinned to TiMini-Print v0.7.3.
 *   **Frontend (`frontend/`):** A React application using Zustand for state management and Konva.js for the interactive canvas.
+
+See the [backend architecture](docs/architecture.md) and [upstream synchronization ledger](docs/upstream-sync.md) for layer ownership, imported changes, and intentionally deferred printer families.
 
 ---
 

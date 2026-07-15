@@ -45,7 +45,7 @@ class RasterConverter(PageConverter):
             return img
         ratio = width / float(img.width)
         height = max(1, int(img.height * ratio))
-        return img.resize((width, height), Image.LANCZOS)
+        return img.resize((width, height), Image.Resampling.LANCZOS)
 
     def _maybe_trim_margins(self, img: Image.Image) -> Image.Image:
         if not (self._trim_side_margins or self._trim_top_bottom_margins):

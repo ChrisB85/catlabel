@@ -3,11 +3,20 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Optional
-
-from typing import Any as PrinterProfile
+from typing import Any, Mapping, Optional
+from ...protocol.families.v5g import (
+    V5G_CONNECT_QUERY_PACKET,
+    V5G_TEMPERATURE_QUERY_PACKET,
+    decode_density_payload,
+    encode_density_payload,
+)
 from ...protocol.family import ProtocolFamily
-from ...protocol.packet import make_packet
+from ...protocol.packet import (
+    make_packet,
+    prefixed_packet_opcode,
+    prefixed_packet_payload,
+    split_prefixed_packets,
+)
 from .base import RuntimeController
 
 
@@ -314,13 +323,15 @@ class V5GRuntimeController(RuntimeController):
         *,
         helper_kind: Optional[str] = None,
         density_profile_key: Optional[str] = None,
-        density_profile: Optional[PrinterProfile] = None,
+        density_profile: Optional[Any] = None,
+        density_levels: Mapping[str, object] | None = None,
     ) -> None:
         self._state = _V5GSessionState(
             helper_kind=helper_kind,
             density_profile_key=density_profile_key,
         )
         self._density_profile = density_profile
+        self._density_levels = density_levels
 
     def adopt_previous(self, previous: RuntimeController | None) -> None:
         if not isinstance(previous, V5GRuntimeController):
@@ -329,15 +340,19 @@ class V5GRuntimeController(RuntimeController):
         density_profile_key = self._state.density_profile_key
         pending_reset_task = self._state.pending_reset_task
         density_profile = self._density_profile
+        density_levels = self._density_levels
         self._state = previous._state
         self._state.helper_kind = helper_kind or self._state.helper_kind
         self._state.density_profile_key = density_profile_key or self._state.density_profile_key
         self._state.pending_reset_task = pending_reset_task
         self._density_profile = density_profile or previous._density_profile
+        self._density_levels = density_levels or previous._density_levels
 
     def debug_snapshot(self) -> dict[str, object]:
         density_levels = None
-        if self._density_profile is not None and self._density_profile.density is not None:
+        if self._density_levels is not None:
+            density_levels = self._density_levels
+        elif self._density_profile is not None and self._density_profile.density is not None:
             density_levels = {
                 "image": {
                     "low": self._density_profile.density.image.low,
@@ -378,6 +393,25 @@ class V5GRuntimeController(RuntimeController):
                 raise KeyError(f"Unknown V5G debug field '{key}'")
             setattr(self._state, key, value)
 
+    async def initialize_connection(self, session, *, mtu_size: int, timeout: float) -> None:
+        _ = mtu_size
+        sent = await session.send_control_packet(V5G_CONNECT_QUERY_PACKET, timeout=timeout)
+        if not sent:
+            raise RuntimeError("V5G connect query send unavailable")
+
+    async def after_initialize(self, session, *, timeout: float) -> None:
+        if not session.can_send_control_packet_wait_notification():
+            return
+        await session.send_control_packet_wait_notification(
+            V5G_TEMPERATURE_QUERY_PACKET,
+            label="V5G temperature",
+            match=lambda payload: (
+                prefixed_packet_opcode(payload, ProtocolFamily.V5G) == 0xD3
+            ),
+            timeout=min(timeout, 0.4),
+            required=False,
+        )
+
     async def stop(self, session) -> None:
         if self._state.pending_reset_task is None:
             return
@@ -385,7 +419,6 @@ class V5GRuntimeController(RuntimeController):
         self._state.pending_reset_task = None
 
     def prepare_standard_payload(self, session, data: bytes) -> bytes:
-        self.on_standard_send_started(session)
         return self._prepare_v5g_standard_payload(session, data)
 
     def on_standard_send_started(self, session) -> None:
@@ -396,7 +429,7 @@ class V5GRuntimeController(RuntimeController):
         self._state.last_complete_time = time.time()
 
     def handle_notification(self, session, payload: bytes) -> None:
-        opcode = session.extract_prefixed_opcode(payload)
+        opcode = prefixed_packet_opcode(payload, ProtocolFamily.V5G)
         if opcode == 0xA3:
             self._update_status(session, payload)
         elif opcode == 0xD2:
@@ -405,6 +438,14 @@ class V5GRuntimeController(RuntimeController):
             self._update_temperature(session, payload)
 
     def _select_levels(self, *, is_text: bool) -> DensityLevels | None:
+        if self._density_levels is not None:
+            source = self._density_levels.get("text" if is_text else "image")
+            if isinstance(source, Mapping):
+                return DensityLevels(
+                    low=int(source["low"]),
+                    middle=int(source["middle"]),
+                    high=int(source["high"]),
+                )
         if self._density_profile is None or self._density_profile.density is None:
             return None
         source = self._density_profile.density.text if is_text else self._density_profile.density.image
@@ -413,12 +454,12 @@ class V5GRuntimeController(RuntimeController):
     def _prepare_v5g_standard_payload(self, session, data: bytes) -> bytes:
         if len(data) <= 50:
             return data
-        packets = session.split_prefixed_packets(data)
+        packets = split_prefixed_packets(data, ProtocolFamily.V5G)
         if packets is None:
             return data
         density_indexes = [
             index for index, packet in enumerate(packets)
-            if session.extract_prefixed_opcode(packet) == 0xF2
+            if prefixed_packet_opcode(packet, ProtocolFamily.V5G) == 0xF2
         ]
         if not density_indexes:
             return data
@@ -431,13 +472,13 @@ class V5GRuntimeController(RuntimeController):
         current_mode_is_text = self._state.last_print_mode_is_text
         last_density_value = self._state.last_density_value
         for index, packet in enumerate(packets):
-            opcode = session.extract_prefixed_opcode(packet)
+            opcode = prefixed_packet_opcode(packet, ProtocolFamily.V5G)
             if opcode == 0xBE:
                 current_mode_is_text = self._extract_print_mode(session, packet)
             if index in rewrite_map:
                 packet = make_packet(
                     0xF2,
-                    int(rewrite_map[index]).to_bytes(2, "little", signed=False),
+                    encode_density_payload(rewrite_map[index]),
                     ProtocolFamily.V5G,
                 )
                 last_density_value = rewrite_map[index]
@@ -575,26 +616,26 @@ class V5GRuntimeController(RuntimeController):
     def _mode_before_packet_index(self, session, packets: list[bytes], packet_index: int) -> bool:
         is_text = self._state.last_print_mode_is_text
         for packet in packets[:packet_index]:
-            if session.extract_prefixed_opcode(packet) == 0xBE:
+            if prefixed_packet_opcode(packet, ProtocolFamily.V5G) == 0xBE:
                 is_text = self._extract_print_mode(session, packet)
         return is_text
 
     @staticmethod
     def _extract_density_value(session, packet: bytes) -> int | None:
-        payload = session.extract_prefixed_payload(packet)
+        payload = prefixed_packet_payload(packet, ProtocolFamily.V5G)
         if payload is None or len(payload) != 2:
             return None
-        return payload[0] | (payload[1] << 8)
+        return decode_density_payload(payload)
 
     @staticmethod
     def _extract_print_mode(session, packet: bytes) -> bool:
-        payload = session.extract_prefixed_payload(packet)
+        payload = prefixed_packet_payload(packet, ProtocolFamily.V5G)
         if not payload:
             return False
         return payload[0] == 0x01
 
     def _update_status(self, session, payload: bytes) -> None:
-        raw = session.extract_prefixed_payload(payload)
+        raw = prefixed_packet_payload(payload, ProtocolFamily.V5G)
         if not raw:
             return
         status = raw[0]
@@ -609,14 +650,14 @@ class V5GRuntimeController(RuntimeController):
         )
 
     def _update_d2_status(self, session, payload: bytes) -> None:
-        raw = session.extract_prefixed_payload(payload)
+        raw = prefixed_packet_payload(payload, ProtocolFamily.V5G)
         if raw is None:
             return
         self._state.d2_status = True
         session.report_debug("V5G D2 status received")
 
     def _update_temperature(self, session, payload: bytes) -> None:
-        raw = session.extract_prefixed_payload(payload)
+        raw = prefixed_packet_payload(payload, ProtocolFamily.V5G)
         if not raw:
             return
         previous = self._state.temperature_c
@@ -653,7 +694,7 @@ class V5GRuntimeController(RuntimeController):
     async def _send_density_reset(self, session, value: int) -> None:
         packet = make_packet(
             0xF2,
-            int(value).to_bytes(2, "little", signed=False),
+            encode_density_payload(value),
             ProtocolFamily.V5G,
         )
         await session.send_control_packet(packet, timeout=0.2)

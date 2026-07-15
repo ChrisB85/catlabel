@@ -1,42 +1,45 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import Any
 
 from ..raster import PixelFormat, RasterSet
-from ._builders import _build_job_from_raster_set
-from .commands import (
-    advance_paper_cmd,
-    retract_paper_cmd,
-)
+from ._builders import _build_job_model_from_raster_set
+from .commands import advance_paper_cmd, retract_paper_cmd
 from .families import get_protocol_behavior
-from .family import ProtocolFamily
+from .steps import ProtocolStep
+from .runtime import RuntimePrintCapabilities
 from .types import ImageEncoding, ImagePipelineConfig, PaperMode
 
-if TYPE_CHECKING:
-    from typing import Any as PrinterDevice
-    from ..printing.runtime.base import RuntimeController
-
-
-@dataclass(frozen=True)
 class ProtocolJob:
-    """Printable protocol payload plus optional session runtime controller."""
+    """Stateless payload and execution policy, independent of a live session."""
 
-    payload: bytes
-    runtime_controller: RuntimeController | None = None
+    def __init__(
+        self,
+        payload: bytes | None = None,
+        *,
+        steps: tuple[ProtocolStep, ...] = (),
+        wait_for_completion: bool = False,
+    ) -> None:
+        normalized_steps = tuple(steps)
+        steps_payload = b"".join(
+            step.data for step in normalized_steps if step.include_in_payload
+        )
+        if payload is None:
+            normalized_payload = steps_payload
+        else:
+            normalized_payload = bytes(payload)
+            if normalized_steps and normalized_payload != steps_payload:
+                raise ValueError("Protocol job payload does not match included protocol steps")
+        self.payload = normalized_payload
+        self.steps = normalized_steps
+        self.wait_for_completion = bool(wait_for_completion)
 
 
 class PrinterProtocol:
-    """Build protocol jobs for one resolved ``PrinterDevice``."""
+    """Build stateless protocol jobs for one resolved printer device."""
 
-    def __init__(self, device: PrinterDevice) -> None:
+    def __init__(self, device: Any) -> None:
         self.device = device
-
-    def create_runtime_controller(self) -> RuntimeController | None:
-        """Create the session runtime controller required by this device, if any."""
-        from ..printing.runtime.factory import runtime_controller_for_device
-
-        return runtime_controller_for_device(self.device)
 
     def build_job(
         self,
@@ -52,28 +55,39 @@ class PrinterProtocol:
         pixel_format_override: PixelFormat | None = None,
         page_index: int = 1,
         page_count: int = 1,
+        runtime_capabilities: RuntimePrintCapabilities | None = None,
     ) -> ProtocolJob:
-        """Build a printable job from raster input for this device."""
-        payload = self._build_payload(
-            raster_set,
-            is_text=is_text,
-            blackening=blackening,
-            feed_padding=feed_padding,
-            paper_mode=paper_mode,
-            lsb_first=lsb_first,
+        pipeline = self.resolve_image_pipeline(
             image_pipeline=image_pipeline,
             image_encoding_override=image_encoding_override,
             pixel_format_override=pixel_format_override,
+        )
+        profile = self.device.profile
+        payload, steps = _build_job_model_from_raster_set(
+            raster_set=raster_set,
+            is_text=is_text,
+            speed=profile.select_speed(is_text=is_text),
+            energy=profile.select_energy(is_text=is_text, blackening=blackening),
+            density=profile.select_density(is_text=is_text, blackening=blackening),
+            blackening=blackening,
+            lsb_first=lsb_first if lsb_first is not None else not profile.a4xii,
+            protocol_family=self.device.protocol_family,
+            protocol_variant=getattr(self.device, "protocol_variant", None),
+            feed_padding=feed_padding,
+            dev_dpi=profile.dev_dpi,
+            can_print_label=profile.can_print_label,
+            post_print_feed_count=profile.post_print_feed_count,
+            image_pipeline=pipeline,
+            paper_mode=paper_mode,
             page_index=page_index,
             page_count=page_count,
+            one_length=getattr(profile, "one_length", 0),
+            a4xii=bool(getattr(profile, "a4xii", False)),
+            runtime_capabilities=runtime_capabilities,
         )
-        return ProtocolJob(
-            payload=payload,
-            runtime_controller=self.create_runtime_controller(),
-        )
+        return ProtocolJob(payload=payload, steps=steps, wait_for_completion=True)
 
     def build_paper_motion(self, action: str) -> ProtocolJob:
-        """Build a feed or retract paper-motion job for this device."""
         if action == "feed":
             payload = advance_paper_cmd(
                 self.device.profile.dev_dpi,
@@ -88,7 +102,7 @@ class PrinterProtocol:
             )
         else:
             raise ValueError(f"Unknown paper motion action: {action}")
-        return ProtocolJob(payload=payload, runtime_controller=None)
+        return ProtocolJob(payload=payload)
 
     def resolve_image_pipeline(
         self,
@@ -97,7 +111,6 @@ class PrinterProtocol:
         image_encoding_override: ImageEncoding | None = None,
         pixel_format_override: PixelFormat | None = None,
     ) -> ImagePipelineConfig:
-        """Resolve the effective image pipeline for this job request."""
         behavior = get_protocol_behavior(self.device.protocol_family)
         if image_pipeline is not None:
             pipeline = image_pipeline
@@ -105,19 +118,19 @@ class PrinterProtocol:
             pipeline = self.device.image_pipeline
         else:
             pipeline = behavior.default_image_pipeline
-
         if image_encoding_override is not None:
             pipeline = ImagePipelineConfig(
                 formats=pipeline.formats,
                 encoding=image_encoding_override,
             )
-        supported_formats = behavior.image_encoding_support.get(pipeline.encoding)
-        if supported_formats is None:
+        supported = behavior.image_encoding_support.get(pipeline.encoding)
+        if supported is None:
             raise ValueError(
-                f"{self.device.protocol_family.value} does not support image encoding {pipeline.encoding.value}"
+                f"{self.device.protocol_family.value} does not support image encoding "
+                f"{pipeline.encoding.value}"
             )
         if pixel_format_override is not None:
-            if pixel_format_override not in supported_formats:
+            if pixel_format_override not in supported:
                 raise ValueError(
                     f"{self.device.protocol_family.value} image encoding {pipeline.encoding.value} "
                     f"does not support {pixel_format_override.value}"
@@ -126,80 +139,29 @@ class PrinterProtocol:
                 pipeline = pipeline.with_default_format(pixel_format_override)
             else:
                 pipeline = ImagePipelineConfig(
-                    formats=(pixel_format_override,) + tuple(
-                        value for value in pipeline.formats if value != pixel_format_override
-                    ),
+                    formats=(pixel_format_override,)
+                    + tuple(value for value in pipeline.formats if value != pixel_format_override),
                     encoding=pipeline.encoding,
                 )
-        elif pipeline.default_format not in supported_formats:
-            fallback = next((value for value in pipeline.formats if value in supported_formats), None)
-            if fallback is not None:
+        elif pipeline.default_format not in supported:
+            fallback = next(
+                (value for value in pipeline.formats if value in supported),
+                supported[0],
+            )
+            if fallback in pipeline.formats:
                 pipeline = pipeline.with_default_format(fallback)
             else:
                 pipeline = ImagePipelineConfig(
-                    formats=tuple(supported_formats) + tuple(
-                        value for value in pipeline.formats if value not in supported_formats
-                    ),
+                    formats=(fallback,)
+                    + tuple(value for value in pipeline.formats if value != fallback),
                     encoding=pipeline.encoding,
                 )
         return pipeline
 
-    def _resolve_lsb_first(self, override: bool | None) -> bool:
-        if override is not None:
-            return override
-        return not self.device.profile.a4xii
-
-    def _select_density(self, *, is_text: bool, blackening: int) -> int | None:
-        return self.device.profile.select_density(
-            is_text=is_text,
-            blackening=blackening,
-        )
-
-    def _build_payload(
-        self,
-        raster_set: RasterSet,
-        *,
-        is_text: bool,
-        blackening: int,
-        feed_padding: int,
-        lsb_first: bool | None,
-        image_pipeline: ImagePipelineConfig | None,
-        image_encoding_override: ImageEncoding | None,
-        pixel_format_override: PixelFormat | None,
-        paper_mode: PaperMode | None,
-        page_index: int,
-        page_count: int,
-    ) -> bytes:
-        resolved_pipeline = self.resolve_image_pipeline(
-            image_pipeline=image_pipeline,
-            image_encoding_override=image_encoding_override,
-            pixel_format_override=pixel_format_override,
-        )
-        return _build_job_from_raster_set(
-            raster_set=raster_set,
-            is_text=is_text,
-            speed=self.device.profile.select_speed(is_text=is_text),
-            energy=self.device.profile.select_energy(
-                is_text=is_text,
-                blackening=blackening,
-            ),
-            density=self._select_density(is_text=is_text, blackening=blackening),
-            blackening=blackening,
-            lsb_first=self._resolve_lsb_first(lsb_first),
-            protocol_family=self.device.protocol_family,
-            protocol_variant=getattr(self.device, "protocol_variant", None),
-            feed_padding=feed_padding,
-            dev_dpi=self.device.profile.dev_dpi,
-            can_print_label=self.device.profile.can_print_label,
-            post_print_feed_count=self.device.profile.post_print_feed_count,
-            image_pipeline=resolved_pipeline,
-            paper_mode=paper_mode,
-            page_index=page_index,
-            page_count=page_count,
-        )
-
     def supported_paper_modes(self) -> tuple[PaperMode, ...]:
         behavior = get_protocol_behavior(self.device.protocol_family)
         if behavior.supported_paper_modes_resolver is not None:
-            return behavior.supported_paper_modes_resolver(getattr(self.device, "protocol_variant", None))
+            return behavior.supported_paper_modes_resolver(
+                getattr(self.device, "protocol_variant", None)
+            )
         return behavior.supported_paper_modes

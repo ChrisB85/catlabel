@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from ...protocol.family import ProtocolFamily
+from ...devices import BleTransportProfile
 
 SocketLike = Any
 
@@ -20,7 +20,7 @@ class DeviceInfo:
     address: str
     paired: Optional[bool] = None
     transport: DeviceTransport = DeviceTransport.CLASSIC
-    protocol_family: Optional[ProtocolFamily] = None
+    ble_profile: Optional[BleTransportProfile] = None
 
     def merge(self, other: "DeviceInfo") -> "DeviceInfo":
         if self.address != other.address or self.transport != other.transport:
@@ -35,13 +35,13 @@ class DeviceInfo:
             paired = False
         else:
             paired = None
-        protocol_family = self.protocol_family or other.protocol_family
+        ble_profile = self.ble_profile or other.ble_profile
         return DeviceInfo(
             name=name,
             address=self.address,
             paired=paired,
             transport=self.transport,
-            protocol_family=protocol_family,
+            ble_profile=ble_profile,
         )
 
     @staticmethod

@@ -6,7 +6,7 @@ from ..family import ProtocolFamily
 from ..packet import make_packet
 from ...raster import PixelFormat
 from ..types import ImageEncoding, ImagePipelineConfig
-from .base import BleTransportProfile, PrintJobRequest, ProtocolBehavior
+from .base import PrintJobRequest, ProtocolBehavior
 
 # Firmware blackening 1-5 maps to the protocol A4 quality bytes, not to
 # literal energy values. Keep this as a lookup table rather than arithmetic.
@@ -15,9 +15,27 @@ _QUALITY_BY_LEVEL = (0x31, 0x32, 0x33, 0x34, 0x35)
 # a V5G print job.
 _START_LATTICE = bytes.fromhex("AA551738445F5F5F44382C")
 _FINISH_LATTICE = bytes.fromhex("AA55170000000000000017")
+# The source applications use fixed BD wrapper values; this is not BLE pacing.
+_PRE_IMAGE_FEED_SPEED = 0x0A
+_POST_IMAGE_FEED_SPEED = 0x19
+_DENSITY_PAYLOAD_PREFIX = 0x01
+_DENSITY_MIN = 1
+_DENSITY_MAX = 200
 # Gray jobs are sent in 20-row compressed bands.
 _GRAY_BAND_ROWS = 20
 V5G_CONNECT_QUERY_PACKET = bytes.fromhex("5178A30001000000FF")
+V5G_TEMPERATURE_QUERY_PACKET = bytes.fromhex("5178D30001000000FF")
+
+
+def encode_density_payload(density: int) -> bytes:
+    value = max(_DENSITY_MIN, min(_DENSITY_MAX, int(density)))
+    return bytes([_DENSITY_PAYLOAD_PREFIX, value])
+
+
+def decode_density_payload(payload: bytes) -> int | None:
+    if len(payload) != 2 or payload[0] != _DENSITY_PAYLOAD_PREFIX:
+        return None
+    return payload[1]
 
 
 def _quality_packet(blackening: int, protocol_family) -> bytes:
@@ -31,8 +49,8 @@ def _energy_packet(energy: int, protocol_family) -> bytes:
     return make_packet(0xAF, int(energy).to_bytes(2, "little", signed=False), protocol_family)
 
 
-def _print_mode_packet(is_text: bool, protocol_family) -> bytes:
-    return make_packet(0xBE, bytes([1 if is_text else 0]), protocol_family)
+def _print_mode_packet(protocol_family) -> bytes:
+    return make_packet(0xBE, bytes([0x00]), protocol_family)
 
 
 def _feed_packet(speed: int, protocol_family) -> bytes:
@@ -56,7 +74,7 @@ def _lattice_packet(start: bool, protocol_family) -> bytes:
 
 
 def _density_packet(density: int, protocol_family) -> bytes:
-    return make_packet(0xF2, int(density).to_bytes(2, "little", signed=False), protocol_family)
+    return make_packet(0xF2, encode_density_payload(density), protocol_family)
 
 
 def _dot_frames(request: PrintJobRequest) -> bytes:
@@ -94,34 +112,30 @@ def _gray_frames(request: PrintJobRequest) -> bytes:
 
 def build_job(request: PrintJobRequest) -> bytes:
     job = bytearray()
+    if request.density is not None:
+        job += _density_packet(request.density, request.protocol_family)
+    job += _state_query_packet(request.protocol_family)
     job += _quality_packet(request.blackening, request.protocol_family)
     job += _lattice_packet(True, request.protocol_family)
     job += _energy_packet(request.energy, request.protocol_family)
-    job += _print_mode_packet(request.is_text, request.protocol_family)
-    job += _feed_packet(request.speed, request.protocol_family)
-    if request.density is not None:
-        job += _density_packet(request.density, request.protocol_family)
+    job += _print_mode_packet(request.protocol_family)
+    job += _feed_packet(_PRE_IMAGE_FEED_SPEED, request.protocol_family)
 
     if request.image_pipeline.encoding == ImageEncoding.V5G_GRAY:
         job += _gray_frames(request)
     else:
         job += _dot_frames(request)
+    job += _feed_packet(_POST_IMAGE_FEED_SPEED, request.protocol_family)
 
     for _ in range(max(0, request.post_print_feed_count)):
         job += _paper_packet(request.dev_dpi, request.protocol_family)
     job += _lattice_packet(False, request.protocol_family)
     job += _state_query_packet(request.protocol_family)
+    job += _state_query_packet(request.protocol_family)
     return bytes(job)
 
 
-TRANSPORT = BleTransportProfile(
-    connect_packets=(V5G_CONNECT_QUERY_PACKET,),
-    prefer_generic_notify=True,
-)
-
-
 BEHAVIOR = ProtocolBehavior(
-    transport=TRANSPORT,
     default_image_pipeline=ImagePipelineConfig(
         formats=(PixelFormat.BW1, PixelFormat.GRAY4, PixelFormat.GRAY8),
         encoding=ImageEncoding.V5G_DOT,

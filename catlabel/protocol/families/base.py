@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Mapping
+from typing import TYPE_CHECKING, Callable, Mapping
 
 from ...raster import PixelFormat, RasterSet
 from ..family import ProtocolFamily
@@ -9,39 +9,17 @@ from ..packet import prefixed_packet_length
 from ..types import ImageEncoding, ImagePipelineConfig, PaperMode
 
 ManualMotionBuilder = Callable[[int, ProtocolFamily, str | None], bytes]
-FamilyJobBuilder = Callable[["PrintJobRequest"], bytes]
+if TYPE_CHECKING:
+    from ..plan import ProtocolPlan
+    from ..runtime import RuntimePrintCapabilities
+
+FamilyJobBuilder = Callable[["PrintJobRequest"], "bytes | ProtocolPlan | None"]
 PaperModeResolver = Callable[[str | None], tuple[PaperMode, ...]]
-
-
-@dataclass(frozen=True)
-class FlowControlProfile:
-    pause_packets: frozenset[bytes] = frozenset()
-    resume_packets: frozenset[bytes] = frozenset()
-
-
-@dataclass(frozen=True)
-class BleTransportProfile:
-    # Transport settings drive endpoint selection and write routing.
-    split_bulk_writes: bool = False
-    connect_packets: tuple[bytes, ...] = ()
-    connect_delay_ms: int = 0
-    standard_chunk_cap: int = 20
-    standard_write_delay_ms: int = 50
-    preferred_service_uuid: str = ""
-    bulk_char_uuid: str = ""
-    notify_char_uuid: str = ""
-    prefer_generic_notify: bool = False
-    flow_control: FlowControlProfile | None = None
-    wait_for_flow_on_standard_write: bool = False
-    bulk_chunk_cap: int = 180
-    bulk_write_delay_ms: int = 10
-    split_tail_packets: tuple[bytes, ...] = ()
 
 
 @dataclass(frozen=True)
 class ProtocolBehavior:
     implemented: bool = True
-    transport: BleTransportProfile = field(default_factory=BleTransportProfile)
     default_image_pipeline: ImagePipelineConfig = field(
         default_factory=lambda: ImagePipelineConfig(
             formats=(PixelFormat.BW1,),
@@ -78,6 +56,11 @@ class PrintJobRequest:
     paper_mode: PaperMode | None = None
     page_index: int = 1
     page_count: int = 1
+    left_padding_pixels: int = 0
+    one_length: int = 0
+    a4xii: bool = False
+    a4_sheet_max_height: int | None = None
+    runtime_capabilities: "RuntimePrintCapabilities | None" = None
 
     def require_raster(self, pixel_format: PixelFormat) -> "RasterBuffer":
         return self.raster_set.require(pixel_format)

@@ -3,14 +3,11 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from collections.abc import Callable
 from typing import Any, Iterable, List, Optional, Tuple
 
 from .... import reporting
-from ....printing.runtime.base import RuntimeController
-from ....printing.runtime.factory import _runtime_controller_for_family
-from ....protocol.families import BleTransportProfile, split_prefixed_bulk_stream
-from ....protocol.family import ProtocolFamily
-from ....protocol.packet import make_packet, prefixed_packet_length
+from ....devices import BleTransportProfile
 from .bleak_adapter_endpoint_resolver import _BleWriteEndpointResolver, _WriteSelection
 
 
@@ -27,17 +24,22 @@ class _BleakBindings:
     notify_char_uuid: str = ""
 
 
+@dataclass
+class _NotificationWaiter:
+    label: str
+    match: Callable[[bytes], bool]
+    future: asyncio.Future[bytes]
+
+
 class _BleakTransportSession:
     """Encapsulates endpoint binding and delegates family runtime to controllers."""
 
     def __init__(
         self,
-        protocol_family: ProtocolFamily,
         transport_profile: BleTransportProfile,
         write_resolver: _BleWriteEndpointResolver,
         reporter: reporting.Reporter,
     ) -> None:
-        self._protocol_family = protocol_family
         self._transport_profile = transport_profile
         self._write_resolver = write_resolver
         self._reporter = reporter
@@ -45,7 +47,13 @@ class _BleakTransportSession:
         self.notify_started = False
         self.flow_can_write = True
         self._client: Any = None
-        self._runtime_controller = _runtime_controller_for_family(protocol_family)
+        self._mtu_size = 180
+        # Stateful protocol behavior is selected by the printing layer and
+        # attached explicitly. Transport never selects a controller by family.
+        self._runtime_controller: Any = None
+        self._runtime_initialized = False
+        self._notification_history: list[bytes] = []
+        self._notification_waiters: list[_NotificationWaiter] = []
 
     def apply_write_selection(self, selection: _WriteSelection) -> None:
         self.bindings.write_char = selection.char
@@ -65,10 +73,11 @@ class _BleakTransportSession:
 
         self.bindings.bulk_write_char = None
         self.bindings.bulk_write_char_uuid = ""
-        if transport.bulk_char_uuid:
+        bulk_write = transport.bulk_write
+        if bulk_write is not None:
             self.bindings.bulk_write_char = self._find_characteristic_by_uuid(
                 services,
-                transport.bulk_char_uuid,
+                bulk_write.char_uuid,
                 preferred_service_uuid=transport.preferred_service_uuid,
             )
             self.bindings.bulk_write_char_uuid = _BleWriteEndpointResolver._normalize_uuid(
@@ -89,7 +98,7 @@ class _BleakTransportSession:
                 transport.notify_char_uuid,
                 preferred_service_uuid=transport.preferred_service_uuid,
             )
-        elif transport.prefer_generic_notify or transport.flow_control is not None:
+        elif transport.prefer_generic_notify:
             self.bindings.notify_char = self._find_notify_characteristic(services)
 
         self.bindings.notify_char_uuid = _BleWriteEndpointResolver._normalize_uuid(
@@ -99,14 +108,8 @@ class _BleakTransportSession:
             self.report_debug(
                 f"selected notify characteristic char={self.bindings.notify_char_uuid}"
             )
-        elif transport.flow_control is not None:
+        elif transport.notify_char_uuid or transport.prefer_generic_notify:
             self.report_debug("configured notify characteristic not found")
-
-    def debug_snapshot(self) -> dict[str, Any]:
-        return self._runtime_controller.debug_snapshot()
-
-    def debug_update(self, **changes: Any) -> None:
-        self._runtime_controller.debug_update(**changes)
 
     async def start_notify_if_available(self, client: Any, callback) -> None:
         if not self.bindings.notify_char or not self.bindings.notify_char_uuid:
@@ -119,6 +122,28 @@ class _BleakTransportSession:
         self.report_debug(
             f"subscribed to notify characteristic {self.bindings.notify_char_uuid}"
         )
+
+    async def attach_runtime_controller(
+        self,
+        runtime_controller: Any,
+        *,
+        mtu_size: int,
+        timeout: float,
+    ) -> None:
+        if runtime_controller is None:
+            return
+        if runtime_controller is not self._runtime_controller:
+            runtime_controller.adopt_previous(self._runtime_controller)
+            self._runtime_controller = runtime_controller
+            self._runtime_initialized = False
+        if not self._runtime_initialized:
+            await self._runtime_controller.initialize_connection(
+                self,
+                mtu_size=mtu_size,
+                timeout=timeout,
+            )
+            await self._runtime_controller.after_initialize(self, timeout=timeout)
+            self._runtime_initialized = True
 
     async def stop_notify_if_started(self, client: Any) -> None:
         if self._runtime_controller is not None:
@@ -133,6 +158,10 @@ class _BleakTransportSession:
         except Exception:
             pass
         self.notify_started = False
+        for waiter in self._notification_waiters:
+            if not waiter.future.done():
+                waiter.future.cancel()
+        self._notification_waiters.clear()
 
     async def initialize_connection(
         self,
@@ -142,33 +171,8 @@ class _BleakTransportSession:
         timeout: float,
     ) -> None:
         self._client = client
-        if self._runtime_controller is not None:
-            await self._runtime_controller.initialize_connection(self, mtu_size=mtu_size, timeout=timeout)
-        if not self._transport_profile.connect_packets:
-            if self._runtime_controller is not None:
-                await self._runtime_controller.after_initialize(self, timeout=timeout)
-            return
-        if not self.bindings.write_char:
-            raise RuntimeError("No write characteristic available")
-        response = self._resolve_response_mode(
-            self.bindings.write_char,
-            self.bindings.write_selection_strategy,
-            self.bindings.write_response_preference,
-        )
-        if self._transport_profile.connect_delay_ms > 0:
-            await asyncio.sleep(self._transport_profile.connect_delay_ms / 1000.0)
-        for packet in self._transport_profile.connect_packets:
-            await self._write_chunks(
-                client,
-                self.bindings.write_char,
-                packet,
-                response=response,
-                chunk_size=min(mtu_size, self._transport_profile.standard_chunk_cap),
-                delay_seconds=self._transport_profile.standard_write_delay_ms / 1000.0,
-                timeout=timeout,
-            )
-        if self._runtime_controller is not None:
-            await self._runtime_controller.after_initialize(self, timeout=timeout)
+        self._mtu_size = mtu_size
+        _ = timeout
 
     async def send(
         self,
@@ -177,18 +181,11 @@ class _BleakTransportSession:
         *,
         mtu_size: int,
         timeout: float,
-        runtime_controller: RuntimeController | None = None,
     ) -> None:
         self._client = client
-        if runtime_controller is not None:
-            runtime_controller.adopt_previous(self._runtime_controller)
-            self._runtime_controller = runtime_controller
+        self._mtu_size = mtu_size
         if not self.bindings.write_char:
             raise RuntimeError("No write characteristic available")
-
-        if self._transport_profile.split_bulk_writes:
-            await self._send_split(client, data, mtu_size=mtu_size, timeout=timeout)
-            return
         await self._send_standard(client, data, mtu_size=mtu_size, timeout=timeout)
 
     async def _send_standard(
@@ -213,119 +210,25 @@ class _BleakTransportSession:
                 f"write mode response={response} strategy={self.bindings.write_selection_strategy} "
                 f"char={self.bindings.write_char_uuid}"
             )
+            mtu_payload = self._effective_mtu_payload(
+                self.bindings.write_char,
+                mtu_size,
+                response=response,
+                reserve=self._transport_profile.write_without_response_payload_reserve,
+            )
             await self._write_chunks(
                 client,
                 self.bindings.write_char,
                 data,
                 response=response,
-                chunk_size=min(mtu_size, self._transport_profile.standard_chunk_cap),
+                chunk_size=min(mtu_payload, self._transport_profile.standard_chunk_cap),
                 delay_seconds=self._transport_profile.standard_write_delay_ms / 1000.0,
                 timeout=timeout,
-                wait_for_flow=self._transport_profile.wait_for_flow_on_standard_write,
+                wait_for_flow=self._transport_profile.flow_controlled_standard_write,
             )
         finally:
             if self._runtime_controller is not None:
                 self._runtime_controller.on_standard_send_finished(self)
-
-    async def _send_split(
-        self,
-        client: Any,
-        data: bytes,
-        *,
-        mtu_size: int,
-        timeout: float,
-    ) -> None:
-        if not self.bindings.bulk_write_char:
-            raise RuntimeError("Bulk write characteristic not found")
-
-        split = split_prefixed_bulk_stream(
-            data,
-            self._protocol_family,
-            self._transport_profile.split_tail_packets,
-        )
-        split_context = None
-        if self._runtime_controller is not None:
-            split_context = self._runtime_controller.build_split_context(self, split)
-
-        cmd_response = self._resolve_response_mode(
-            self.bindings.write_char,
-            self.bindings.write_selection_strategy,
-            self.bindings.write_response_preference,
-        )
-        self.report_debug(
-            f"split write response={cmd_response} cmd_char={self.bindings.write_char_uuid} "
-            f"bulk_char={self.bindings.bulk_write_char_uuid or '<missing>'} "
-            f"notify_char={self.bindings.notify_char_uuid or '<missing>'}"
-        )
-
-        for packet in split.commands:
-            density_updated = False
-            if self._runtime_controller is not None:
-                packet, density_updated = self._runtime_controller.prepare_split_command(self, packet, split_context)
-            if packet is None:
-                continue
-            if self._runtime_controller is not None:
-                await self._runtime_controller.before_split_command(
-                    self,
-                    packet,
-                    split_context,
-                    timeout=timeout,
-                    density_updated=density_updated,
-                )
-                ack_token = self._runtime_controller.arm_command_ack(self, packet)
-            else:
-                ack_token = None
-            try:
-                await self._write_chunks(
-                    client,
-                    self.bindings.write_char,
-                    packet,
-                    response=cmd_response,
-                    chunk_size=min(mtu_size, self._transport_profile.standard_chunk_cap),
-                    delay_seconds=self._transport_profile.standard_write_delay_ms / 1000.0,
-                    timeout=timeout,
-                )
-                if self._runtime_controller is not None:
-                    await self._runtime_controller.after_split_command(
-                        self,
-                        packet,
-                        split_context,
-                        timeout=timeout,
-                        density_updated=density_updated,
-                        ack_token=ack_token,
-                    )
-            except Exception:
-                if self._runtime_controller is not None:
-                    self._runtime_controller.clear_command_ack(self, ack_token)
-                raise
-
-        if split.bulk_payload:
-            bulk_response = self._resolve_response_mode(
-                self.bindings.bulk_write_char,
-                "preferred_uuid",
-                False,
-            )
-            await self._write_chunks(
-                client,
-                self.bindings.bulk_write_char,
-                split.bulk_payload,
-                response=bulk_response,
-                chunk_size=min(mtu_size, self._transport_profile.bulk_chunk_cap),
-                delay_seconds=self._transport_profile.bulk_write_delay_ms / 1000.0,
-                timeout=timeout,
-                wait_for_flow=self._transport_profile.flow_control is not None,
-            )
-
-        for packet in split.trailing_commands:
-            await self._write_chunks(
-                client,
-                self.bindings.write_char,
-                packet,
-                response=cmd_response,
-                chunk_size=min(mtu_size, self._transport_profile.standard_chunk_cap),
-                delay_seconds=self._transport_profile.standard_write_delay_ms / 1000.0,
-                timeout=timeout,
-            )
 
     async def _write_chunks(
         self,
@@ -355,64 +258,97 @@ class _BleakTransportSession:
             await asyncio.sleep(0.01)
 
     def handle_notification(self, payload: bytes) -> None:
-        flow_control = self._transport_profile.flow_control
-        if flow_control is not None:
-            if payload in flow_control.pause_packets:
-                self.flow_can_write = False
-                self.report_debug(f"flow pause: {payload.hex()}")
-                return
-            if payload in flow_control.resume_packets:
-                self.flow_can_write = True
-                self.report_debug(f"flow resume: {payload.hex()}")
-                return
+        self._notification_history.append(bytes(payload))
+        if len(self._notification_history) > 64:
+            del self._notification_history[:-64]
+        for waiter in tuple(self._notification_waiters):
+            if waiter.future.done() or not waiter.match(payload):
+                continue
+            try:
+                self._notification_history.remove(payload)
+            except ValueError:
+                pass
+            waiter.future.set_result(bytes(payload))
+            self._notification_waiters.remove(waiter)
         if self._runtime_controller is not None:
             self._runtime_controller.handle_notification(self, payload)
         self.report_debug(f"BLE notify: {payload.hex()}")
 
-    def build_compat_request(self, **kwargs):
-        if self._runtime_controller is None:
+    def set_flow_paused(self, paused: bool, *, payload: bytes = b"") -> None:
+        self.flow_can_write = not paused
+        state = "pause" if paused else "resume"
+        self.report_debug(f"flow {state}: {payload.hex()}")
+
+    def can_wait_for_notification(self) -> bool:
+        return self.notify_started
+
+    def can_send_control_packet_wait_notification(self) -> bool:
+        return self.can_send_control_packet() and self.can_wait_for_notification()
+
+    async def wait_for_notification(
+        self,
+        label: str,
+        match: Callable[[bytes], bool],
+        *,
+        timeout: float,
+        required: bool = True,
+    ) -> bytes | None:
+        for index in range(len(self._notification_history) - 1, -1, -1):
+            payload = self._notification_history[index]
+            if match(payload):
+                del self._notification_history[index]
+                return payload
+        if not self.can_wait_for_notification():
+            if required:
+                raise RuntimeError(f"BLE notification wait unavailable for {label}")
             return None
-        return self._runtime_controller.build_compat_request(**kwargs)
+        future: asyncio.Future[bytes] = asyncio.get_running_loop().create_future()
+        waiter = _NotificationWaiter(label=label, match=match, future=future)
+        self._notification_waiters.append(waiter)
+        try:
+            return await asyncio.wait_for(asyncio.shield(future), timeout=max(0.0, timeout))
+        except asyncio.TimeoutError:
+            if required:
+                raise TimeoutError(f"Timed out waiting for BLE notification: {label}")
+            return None
+        finally:
+            if waiter in self._notification_waiters:
+                self._notification_waiters.remove(waiter)
 
-    def apply_compat_result(self, **kwargs) -> None:
-        if self._runtime_controller is None:
-            return
-        self._runtime_controller.apply_compat_result(self, **kwargs)
-
-    def make_packet(self, opcode: int, payload: bytes) -> bytes:
-        return make_packet(opcode, payload, self._protocol_family)
-
-    def split_prefixed_packets(self, data: bytes) -> list[bytes] | None:
-        packets: list[bytes] = []
-        offset = 0
-        while offset < len(data):
-            packet_len = prefixed_packet_length(data, offset, self._protocol_family)
-            if packet_len is None:
+    async def send_control_packet_wait_notification(
+        self,
+        packet: bytes,
+        *,
+        label: str,
+        match: Callable[[bytes], bool],
+        timeout: float,
+        required: bool = True,
+    ) -> bytes | None:
+        if not self.can_send_control_packet_wait_notification():
+            if required:
+                raise RuntimeError(f"BLE notification query unavailable for {label}")
+            return None
+        future: asyncio.Future[bytes] = asyncio.get_running_loop().create_future()
+        waiter = _NotificationWaiter(label=label, match=match, future=future)
+        self._notification_waiters.append(waiter)
+        try:
+            sent = await self.send_control_packet(packet, timeout=timeout)
+            if not sent:
+                if required:
+                    raise RuntimeError(f"BLE control send failed before waiting for {label}")
                 return None
-            packets.append(data[offset : offset + packet_len])
-            offset += packet_len
-        return packets
-
-    def extract_prefixed_opcode(self, payload: bytes) -> Optional[int]:
-        prefix = self._protocol_family.packet_prefix
-        if prefix is None:
-            return None
-        if len(payload) < len(prefix) + 1 or payload[: len(prefix)] != prefix:
-            return None
-        return payload[len(prefix)]
-
-    def extract_prefixed_payload(self, packet: bytes) -> Optional[bytes]:
-        prefix = self._protocol_family.packet_prefix
-        if prefix is None:
-            return None
-        if len(packet) < len(prefix) + 6 or packet[: len(prefix)] != prefix:
-            return None
-        payload_length = packet[len(prefix) + 2] | (packet[len(prefix) + 3] << 8)
-        payload_start = len(prefix) + 4
-        payload_end = payload_start + payload_length
-        if payload_end + 2 > len(packet):
-            return None
-        return packet[payload_start:payload_end]
+            try:
+                return await asyncio.wait_for(
+                    asyncio.shield(future),
+                    timeout=max(0.0, timeout),
+                )
+            except asyncio.TimeoutError:
+                if required:
+                    raise TimeoutError(f"Timed out waiting for BLE notification: {label}")
+                return None
+        finally:
+            if waiter in self._notification_waiters:
+                self._notification_waiters.remove(waiter)
 
     @staticmethod
     def _find_characteristic_by_uuid(
@@ -472,6 +408,31 @@ class _BleakTransportSession:
             response_preference,
         )
 
+    @staticmethod
+    def _effective_mtu_payload(
+        characteristic: Any,
+        fallback: int,
+        *,
+        response: bool,
+        reserve: int = 0,
+    ) -> int:
+        if response:
+            return fallback
+        payload = fallback
+        try:
+            max_without_response = getattr(
+                characteristic,
+                "max_write_without_response_size",
+                None,
+            )
+        except Exception:
+            max_without_response = None
+        if isinstance(max_without_response, int) and max_without_response > 0:
+            payload = min(max_without_response, 512)
+        if reserve > 0:
+            payload -= reserve
+        return max(1, payload)
+
     def report_debug(self, message: str) -> None:
         self._reporter.debug(short="BLE", detail=message)
 
@@ -480,6 +441,21 @@ class _BleakTransportSession:
 
     def can_send_control_packet(self) -> bool:
         return bool(self._client and self.bindings.write_char)
+
+    def can_send_standard_payload(self) -> bool:
+        return self.can_send_control_packet()
+
+    def can_send_bulk_payload(self) -> bool:
+        return bool(
+            self._client
+            and self.bindings.bulk_write_char
+            and self._transport_profile.bulk_write is not None
+        )
+
+    def can_query_control_packet(self) -> bool:
+        # GATT request/reply is represented by an atomic write+notification
+        # operation, not by a socket-style read.
+        return False
 
     async def send_control_packet(self, packet: bytes, *, timeout: float = 1.0) -> bool:
         if not self.can_send_control_packet():
@@ -494,8 +470,83 @@ class _BleakTransportSession:
             self.bindings.write_char,
             packet,
             response=response,
-            chunk_size=min(180, self._transport_profile.standard_chunk_cap),
+            chunk_size=min(
+                self._effective_mtu_payload(
+                    self.bindings.write_char,
+                    self._mtu_size,
+                    response=response,
+                    reserve=self._transport_profile.write_without_response_payload_reserve,
+                ),
+                self._transport_profile.standard_chunk_cap,
+            ),
             delay_seconds=self._transport_profile.standard_write_delay_ms / 1000.0,
             timeout=timeout,
+        )
+        return True
+
+    async def query_control_packet(
+        self,
+        packet: bytes,
+        *,
+        timeout: float = 1.0,
+        reply_complete=None,
+    ) -> bytes | None:
+        _ = packet, timeout, reply_complete
+        return None
+
+    async def send_standard_payload(self, data: bytes, *, timeout: float = 1.0) -> bool:
+        if not self.can_send_standard_payload():
+            return False
+        response = self._resolve_response_mode(
+            self.bindings.write_char,
+            self.bindings.write_selection_strategy,
+            self.bindings.write_response_preference,
+        )
+        await self._write_chunks(
+            self._client,
+            self.bindings.write_char,
+            data,
+            response=response,
+            chunk_size=min(
+                self._effective_mtu_payload(
+                    self.bindings.write_char,
+                    self._mtu_size,
+                    response=response,
+                    reserve=self._transport_profile.write_without_response_payload_reserve,
+                ),
+                self._transport_profile.standard_chunk_cap,
+            ),
+            delay_seconds=self._transport_profile.standard_write_delay_ms / 1000.0,
+            timeout=timeout,
+            wait_for_flow=self._transport_profile.flow_controlled_standard_write,
+        )
+        return True
+
+    async def send_bulk_payload(self, data: bytes, *, timeout: float = 1.0) -> bool:
+        bulk_write = self._transport_profile.bulk_write
+        if not self.can_send_bulk_payload() or bulk_write is None:
+            return False
+        response = self._resolve_response_mode(
+            self.bindings.bulk_write_char,
+            "preferred_uuid",
+            False,
+        )
+        await self._write_chunks(
+            self._client,
+            self.bindings.bulk_write_char,
+            data,
+            response=response,
+            chunk_size=min(
+                self._effective_mtu_payload(
+                    self.bindings.bulk_write_char,
+                    self._mtu_size,
+                    response=response,
+                    reserve=self._transport_profile.write_without_response_payload_reserve,
+                ),
+                bulk_write.chunk_cap,
+            ),
+            delay_seconds=bulk_write.write_delay_ms / 1000.0,
+            timeout=timeout,
+            wait_for_flow=bulk_write.flow_controlled,
         )
         return True

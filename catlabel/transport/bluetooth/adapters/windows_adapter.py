@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from .base import _ClassicBluetoothAdapter
-from ....protocol.family import ProtocolFamily
+from ....devices import BleTransportProfile
 from ..constants import RFCOMM_CHANNELS
 from ..types import DeviceInfo, SocketLike
 from .windows_win32 import _Win32ClassicBackend
@@ -30,10 +30,10 @@ class _WindowsClassicAdapter(_ClassicBluetoothAdapter):
     def create_socket(
         self,
         pairing_hint: Optional[bool] = None,
-        protocol_family: Optional[ProtocolFamily] = None,
+        ble_profile: Optional[BleTransportProfile] = None,
         reporter: reporting.Reporter = reporting.DUMMY_REPORTER,
     ) -> SocketLike:
-        _ = protocol_family
+        _ = ble_profile
         return self._winrt.create_socket()
 
     def resolve_rfcomm_channels(self, address: str) -> List[int]:

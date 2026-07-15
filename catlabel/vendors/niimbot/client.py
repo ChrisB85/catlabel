@@ -11,6 +11,7 @@ from ..base import BasePrinterClient
 from ...protocol.encoding import pack_line
 from ...protocol.types import PixelFormat
 from ...rendering.renderer import image_to_raster
+from ...devices import get_ble_transport_profile
 
 # --- Configure robust logging for Niimbot ---
 logger = logging.getLogger("NiimbotClient")
@@ -90,6 +91,7 @@ class NiimbotClient(BasePrinterClient):
         self._buffer = bytearray()
         self._events: Dict[int, Tuple[asyncio.Event, asyncio.AbstractEventLoop]] = {}
         self._responses: Dict[int, NiimbotPacket] = {}
+        self._ble_profile = get_ble_transport_profile("niimbot")
 
     def _publish_response(self, req_code: int, packet: NiimbotPacket) -> None:
         self._responses[req_code] = packet
@@ -179,16 +181,33 @@ class NiimbotClient(BasePrinterClient):
                 PREFERRED_COMBINED =["bef8d6c9-9c21-4c9e-b632-bd58c1009f9f"]
                 PREFERRED_WRITE =["49535343-8841-43f4-a8d4-ecbe34729bb3"]
                 PREFERRED_NOTIFY =["49535343-1e4d-4bd9-ba61-23c647249616"]
+
+                preferred_service_uuid = self._ble_profile.preferred_service_uuid.lower()
+                for service in self.client.services:
+                    if str(service.uuid).lower() != preferred_service_uuid:
+                        continue
+                    for char in service.characteristics:
+                        props = {str(value).lower() for value in char.properties}
+                        if self.write_uuid is None and (
+                            "write" in props or "write-without-response" in props
+                        ):
+                            self.write_uuid = char.uuid
+                        if self.notify_uuid is None and (
+                            "notify" in props or "indicate" in props
+                        ):
+                            self.notify_uuid = char.uuid
                 
                 for service in self.client.services:
                     for char in service.characteristics:
                         uuid_str = str(char.uuid).lower()
-                        if uuid_str in PREFERRED_COMBINED:
+                        if uuid_str in PREFERRED_COMBINED and not (
+                            self.write_uuid and self.notify_uuid
+                        ):
                             self.write_uuid = char.uuid
                             self.notify_uuid = char.uuid
-                        elif uuid_str in PREFERRED_WRITE:
+                        elif uuid_str in PREFERRED_WRITE and self.write_uuid is None:
                             self.write_uuid = char.uuid
-                        elif uuid_str in PREFERRED_NOTIFY:
+                        elif uuid_str in PREFERRED_NOTIFY and self.notify_uuid is None:
                             self.notify_uuid = char.uuid
 
                 if not self.write_uuid or not self.notify_uuid:
@@ -281,14 +300,17 @@ class NiimbotClient(BasePrinterClient):
         if not self.client or not self.client.is_connected:
             raise RuntimeError("BLE client disconnected during write.")
         
-        # Stream out at max MTU
-        for i in range(0, len(data), 128):
-            chunk = data[i:i+128]
+        chunk_size = self._ble_profile.standard_chunk_cap
+        delay_seconds = self._ble_profile.standard_write_delay_ms / 1000.0
+        for i in range(0, len(data), chunk_size):
+            chunk = data[i:i + chunk_size]
             try:
                 await self.client.write_gatt_char(self.write_uuid, chunk, response=False)
             except BleakError:
                 # Flow control fallback for overloaded buffer
                 await self.client.write_gatt_char(self.write_uuid, chunk, response=True)
+            if delay_seconds:
+                await asyncio.sleep(delay_seconds)
 
     def _prepare_print_image(self, image: Image.Image, print_width_px: int) -> Image.Image:
         working = image.copy()

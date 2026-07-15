@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from .base import _ClassicBluetoothAdapter
 from .linux_cmd import LinuxCommandTools
-from ....protocol.family import ProtocolFamily
+from ....devices import BleTransportProfile
 from ..types import DeviceInfo, SocketLike
 from .... import reporting
 
@@ -21,14 +21,14 @@ class _LinuxClassicAdapter(_ClassicBluetoothAdapter):
     def create_socket(
         self,
         pairing_hint: Optional[bool] = None,
-        protocol_family: Optional[ProtocolFamily] = None,
+        ble_profile: Optional[BleTransportProfile] = None,
         reporter: reporting.Reporter = reporting.DUMMY_REPORTER,
     ) -> SocketLike:
         if not hasattr(socket, "AF_BLUETOOTH") or not hasattr(socket, "BTPROTO_RFCOMM"):
             raise RuntimeError(
                 "RFCOMM sockets are not supported on this system. Use --serial or run on Linux."
             )
-        _ = protocol_family
+        _ = ble_profile
         return socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
 
     def resolve_rfcomm_channels(self, address: str) -> List[int]:
