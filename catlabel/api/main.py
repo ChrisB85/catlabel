@@ -95,6 +95,12 @@ app.include_router(print_router)
 app.include_router(project_router)
 app.include_router(ai_router)
 
+
+@app.get("/api/health", tags=["Diagnostics"])
+def health_check():
+    """Lightweight same-origin probe used to distinguish API errors from a stopped server."""
+    return {"status": "ok"}
+
 class PresetCreate(BaseModel):
     name: str
     description: Optional[str] = None

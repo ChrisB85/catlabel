@@ -4,6 +4,7 @@ import asyncio
 import threading
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional, Tuple
 
 from .adapters import _get_ble_adapter, _get_classic_adapter
@@ -19,6 +20,14 @@ class SppBackend:
     def __init__(self, reporter: reporting.Reporter = reporting.DUMMY_REPORTER) -> None:
         self._sock: Optional[SocketLike] = None
         self._lock = threading.Lock()
+        # WinRT and Bleak both retain event-loop/native state for the lifetime
+        # of a connection. The default asyncio executor may run consecutive
+        # operations on different threads, which is unsafe for those objects
+        # on Windows. Keep every operation for this backend on one worker.
+        self._executor = ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="catlabel-bluetooth",
+        )
         self._connected = False
         self._channel: Optional[int] = None
         self._transport: Optional[DeviceTransport] = None
@@ -50,7 +59,12 @@ class SppBackend:
         pairing_hint: Optional[bool] = None,
     ) -> None:
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, self._connect_attempts_blocking, [device], pairing_hint)
+        await loop.run_in_executor(
+            self._executor,
+            self._connect_attempts_blocking,
+            [device],
+            pairing_hint,
+        )
 
     async def connect_attempts(
         self,
@@ -58,7 +72,12 @@ class SppBackend:
         pairing_hint: Optional[bool] = None,
     ) -> None:
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, self._connect_attempts_blocking, attempts, pairing_hint)
+        await loop.run_in_executor(
+            self._executor,
+            self._connect_attempts_blocking,
+            attempts,
+            pairing_hint,
+        )
 
     def is_connected(self) -> bool:
         return self._connected
@@ -70,7 +89,7 @@ class SppBackend:
 
     async def disconnect(self) -> None:
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, self._disconnect_blocking)
+        await loop.run_in_executor(self._executor, self._disconnect_blocking)
 
     async def attach_runtime_controller(
         self,
@@ -80,7 +99,7 @@ class SppBackend:
     ) -> None:
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(
-            None,
+            self._executor,
             self._attach_runtime_controller_blocking,
             runtime_controller,
             timeout,
@@ -109,7 +128,7 @@ class SppBackend:
     ) -> bool:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
-            None,
+            self._executor,
             self._send_control_packet_blocking,
             packet,
             timeout,
@@ -123,7 +142,7 @@ class SppBackend:
     ) -> bool:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
-            None,
+            self._executor,
             self._send_bulk_payload_blocking,
             data,
             timeout,
@@ -138,7 +157,7 @@ class SppBackend:
     ) -> bytes | None:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
-            None,
+            self._executor,
             self._query_control_packet_blocking,
             packet,
             timeout,
@@ -155,7 +174,7 @@ class SppBackend:
     ) -> bytes | None:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
-            None,
+            self._executor,
             self._wait_for_notification_blocking,
             label,
             match,
@@ -174,7 +193,7 @@ class SppBackend:
     ) -> bytes | None:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
-            None,
+            self._executor,
             self._send_control_packet_wait_notification_blocking,
             packet,
             label,
@@ -194,7 +213,7 @@ class SppBackend:
             delay_ms = interval_ms
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(
-            None,
+            self._executor,
             self._write_blocking,
             data,
             chunk_size,

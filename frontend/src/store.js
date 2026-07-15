@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { toPng } from 'html-to-image';
 import { calculateAutoFitItem } from './utils/rendering';
+import { apiErrorFromResponse, describePrintError } from './utils/apiErrors';
 import { buildLabelTemplateMarkup } from './components/templateStyles';
 
 const recalcAutoFit = (items, batchRecords, cw, ch) => {
@@ -451,12 +452,12 @@ export const useStore = create(withHistory((set, get) => ({
       });
 
       if (!printRes.ok) {
-        const err = await printRes.json();
-        throw new Error(err.detail || "Print failed");
+        throw await apiErrorFromResponse(printRes, 'Print failed');
       }
     } catch (e) {
       console.error(e);
-      alert(`Failed to print: ${e.message}`);
+      const message = await describePrintError(e);
+      alert(`Failed to print:\n\n${message}`);
     } finally {
       set({ isPrinting: false, pendingPrintJob: null });
     }

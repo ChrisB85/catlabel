@@ -1,5 +1,8 @@
 import asyncio
 import base64
+import logging
+import re
+import uuid
 from io import BytesIO
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, HTTPException
@@ -13,6 +16,61 @@ from ..transport.bluetooth import SppBackend
 from ..rendering.template import render_via_browser
 
 router = APIRouter(tags=["Print"])
+logger = logging.getLogger(__name__)
+
+
+def _exception_text(exc: BaseException | None) -> str | None:
+    if exc is None:
+        return None
+    text = str(exc).strip()
+    return text or exc.__class__.__name__
+
+
+def _print_http_error(
+    *,
+    job_id: str,
+    stage: str,
+    message: str,
+    status_code: int,
+    exc: BaseException | None = None,
+    suggestion: str | None = None,
+) -> HTTPException:
+    cause = _exception_text(exc)
+    detail = {
+        "message": message,
+        "stage": stage,
+        "error_id": job_id,
+    }
+    if cause:
+        detail["error"] = cause
+    if suggestion:
+        detail["suggestion"] = suggestion
+
+    exc_info = None
+    if exc is not None:
+        exc_info = (type(exc), exc, exc.__traceback__)
+    logger.error(
+        "Print job %s failed during %s: %s%s",
+        job_id,
+        stage,
+        message,
+        f" ({cause})" if cause else "",
+        exc_info=exc_info,
+    )
+    return HTTPException(status_code=status_code, detail=detail)
+
+
+def _same_device_address(left: str, right: str) -> bool:
+    left_text = str(left or "").strip().casefold()
+    right_text = str(right or "").strip().casefold()
+    if left_text == right_text:
+        return True
+
+    # Windows APIs may return the same six-byte address with '-' or ':'
+    # separators depending on whether it came from WinRT or Win32.
+    left_hex = re.sub(r"[^0-9a-f]", "", left_text)
+    right_hex = re.sub(r"[^0-9a-f]", "", right_text)
+    return len(left_hex) == 12 and left_hex == right_hex
 
 class PrintRequest(BaseModel):
     mac_address: str
@@ -150,6 +208,7 @@ def update_printer_profile(mac_address: str, update: PrinterProfileUpdate):
 
 async def execute_print_jobs(mac_address: str, images: List[Any], split_mode: bool = False, dither: bool = True):
     global _scanned_devices_cache
+    job_id = uuid.uuid4().hex[:8]
 
     def _get_db_settings(mac):
         with Session(engine) as session:
@@ -166,40 +225,122 @@ async def execute_print_jobs(mac_address: str, images: List[Any], split_mode: bo
     settings = db_data["settings"]
     printer_profile = db_data["profile"]
 
-    target_device = next((d for d in _scanned_devices_cache if d.address == mac_address), None)
+    target_device = next(
+        (d for d in _scanned_devices_cache if _same_device_address(d.address, mac_address)),
+        None,
+    )
+    scan_failures = []
 
     if not target_device:
-        devices, _ = await SppBackend.scan_with_failures(
-            include_classic=True,
-            include_ble=True,
-        )
+        try:
+            devices, scan_failures = await SppBackend.scan_with_failures(
+                include_classic=True,
+                include_ble=True,
+            )
+        except Exception as exc:
+            raise _print_http_error(
+                job_id=job_id,
+                stage="scan",
+                message="CatLabel could not scan the computer's Bluetooth adapters.",
+                status_code=503,
+                exc=exc,
+                suggestion="Check that Bluetooth is enabled, then scan for the printer again.",
+            ) from exc
         _scanned_devices_cache = _recognized_scanned_devices(devices)
-        target_device = next((d for d in _scanned_devices_cache if d.address == mac_address), None)
+        target_device = next(
+            (d for d in _scanned_devices_cache if _same_device_address(d.address, mac_address)),
+            None,
+        )
 
     if not target_device:
-        raise HTTPException(status_code=404, detail=f"Printer {mac_address} not found. Is it turned on?")
+        scan_detail = "; ".join(str(f.error) for f in scan_failures) or None
+        raise _print_http_error(
+            job_id=job_id,
+            stage="scan",
+            message=f"Printer {mac_address} was not found during a fresh Bluetooth scan.",
+            status_code=404,
+            exc=RuntimeError(scan_detail) if scan_detail else None,
+            suggestion="Make sure the printer is on and in range, then scan and select it again.",
+        )
 
     from ..vendors import VendorRegistry
-    hardware_info = VendorRegistry.identify_device(
-        getattr(target_device, "name", ""),
-        target_device,
-        target_device.address,
-    )
-
-    manifest = VendorRegistry.get_manifest(hardware_info["vendor"])
-    client = manifest.get_client(target_device, hardware_info, printer_profile, settings)
-
-    connected = await client.connect()
-    if not connected:
-        raise HTTPException(
+    try:
+        hardware_info = VendorRegistry.identify_device(
+            getattr(target_device, "name", ""),
+            target_device,
+            target_device.address,
+        )
+        manifest = VendorRegistry.get_manifest(hardware_info["vendor"])
+        client = manifest.get_client(target_device, hardware_info, printer_profile, settings)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _print_http_error(
+            job_id=job_id,
+            stage="prepare",
+            message="CatLabel could not prepare the selected printer driver.",
             status_code=500,
-            detail=f"Failed to connect to printer via {hardware_info['vendor']} engine.",
+            exc=exc,
+        ) from exc
+
+    try:
+        connected = await client.connect()
+    except HTTPException as exc:
+        raise _print_http_error(
+            job_id=job_id,
+            stage="connect",
+            message=str(exc.detail),
+            status_code=exc.status_code,
+            exc=exc,
+            suggestion="Check that the printer is on, in range, and paired when using Classic Bluetooth.",
+        ) from exc
+    except Exception as exc:
+        raise _print_http_error(
+            job_id=job_id,
+            stage="connect",
+            message=f"CatLabel could not connect using the {hardware_info['vendor']} printer driver.",
+            status_code=503,
+            exc=exc,
+            suggestion="Check that the printer is on, in range, and paired when using Classic Bluetooth.",
+        ) from exc
+    if not connected:
+        connection_error = getattr(client, "last_error", None)
+        raise _print_http_error(
+            job_id=job_id,
+            stage="connect",
+            message=f"CatLabel could not connect using the {hardware_info['vendor']} printer driver.",
+            status_code=503,
+            exc=connection_error,
+            suggestion="Check that the printer is on, in range, and paired when using Classic Bluetooth.",
         )
 
     try:
-        await client.print_images(images, split_mode, dither=dither)
+        try:
+            await client.print_images(images, split_mode, dither=dither)
+        except HTTPException as exc:
+            raise _print_http_error(
+                job_id=job_id,
+                stage="print",
+                message=str(exc.detail),
+                status_code=exc.status_code,
+                exc=exc,
+            ) from exc
+        except Exception as exc:
+            raise _print_http_error(
+                job_id=job_id,
+                stage="print",
+                message="The printer connection was established, but the print job failed.",
+                status_code=500,
+                exc=exc,
+                suggestion="Turn the printer off and on, scan again, and retry the print.",
+            ) from exc
     finally:
-        await client.disconnect()
+        try:
+            await client.disconnect()
+        except Exception:
+            # A cleanup failure must not hide the real print result. It is
+            # still important in the launcher log for the next connection.
+            logger.exception("Print job %s failed while disconnecting", job_id)
 
 async def execute_print_job(mac_address: str, img: Any, split_mode: bool = False, dither: bool = True):
     await execute_print_jobs(mac_address, [img], split_mode, dither=dither)
