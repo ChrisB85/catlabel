@@ -18,6 +18,18 @@ class _Characteristic:
     max_write_without_response_size = 23
 
 
+class _NotifyCharacteristic:
+    uuid = "0000ffe2-0000-1000-8000-00805f9b34fb"
+    properties = ["notify"]
+
+
+class _Service:
+    uuid = "0000ffe0-0000-1000-8000-00805f9b34fb"
+
+    def __init__(self, *characteristics) -> None:
+        self.characteristics = list(characteristics)
+
+
 class _ImmediateReplyClient:
     def __init__(self, session: _BleakTransportSession, reply: bytes) -> None:
         self.session = session
@@ -30,6 +42,19 @@ class _ImmediateReplyClient:
 
 
 class BleTransportSessionTests(unittest.IsolatedAsyncioTestCase):
+    def test_generic_notify_profile_binds_notify_characteristic(self) -> None:
+        session = _BleakTransportSession(
+            transport_profile=BleTransportProfile(prefer_generic_notify=True),
+            write_resolver=_BleWriteEndpointResolver(reporter=reporting.DUMMY_REPORTER),
+            reporter=reporting.DUMMY_REPORTER,
+        )
+        notify_char = _NotifyCharacteristic()
+
+        session.configure_endpoints([_Service(_Characteristic(), notify_char)])
+
+        self.assertIs(session.bindings.notify_char, notify_char)
+        self.assertEqual(session.bindings.notify_char_uuid, notify_char.uuid)
+
     def test_write_without_response_reserve_reduces_reported_payload(self) -> None:
         self.assertEqual(
             _BleakTransportSession._effective_mtu_payload(
