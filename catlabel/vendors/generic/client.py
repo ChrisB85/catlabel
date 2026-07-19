@@ -1,5 +1,5 @@
 import asyncio
-from typing import List
+from typing import List, Mapping
 from fastapi import HTTPException
 from PIL import Image
 
@@ -19,6 +19,46 @@ from ...rendering.renderer import image_to_raster
 from ...transport.bluetooth import DeviceInfo, SppBackend
 from ...transport.bluetooth.types import DeviceTransport
 from ...raster import PixelFormat, RasterSet
+
+
+def _image_density_levels(model) -> Mapping[str, object] | None:
+    density = (
+        getattr(model, "runtime_density", None)
+        or getattr(model, "profile_density", None)
+    )
+    if not isinstance(density, Mapping):
+        return None
+    image = density.get("image")
+    return image if isinstance(image, Mapping) else None
+
+
+def _blackening_level_for_density(
+    density: int,
+    levels: Mapping[str, object] | None,
+) -> int:
+    """Map a raw V5G density override back to upstream's five levels."""
+
+    if levels is None:
+        low, middle, high = 50, 100, 150
+    else:
+        low = int(levels.get("low", 50))
+        middle = int(levels.get("middle", low))
+        high = int(levels.get("high", middle))
+
+    value = int(density)
+    if value == middle:
+        return 3
+    if value < middle:
+        return 1 if value <= low else 2
+    return 5 if value >= high else 4
+
+
+def _energy_for_blackening_level(model, level: int, default: int) -> int:
+    if level <= 2:
+        return int(getattr(model, "thin_energy", default) or default)
+    if level >= 4:
+        return int(getattr(model, "deepen_energy", default) or default)
+    return int(getattr(model, "moderation_energy", default) or default)
 
 
 class _GenericBackendConnection:
@@ -226,14 +266,38 @@ class GenericClient(BasePrinterClient):
         resolved_energy = self.printer_profile.energy if self.printer_profile and self.printer_profile.energy not in (None, 0) else (self.settings.energy if self.settings.energy > 0 else hardware_default_energy)
 
         use_speed = max(0, min(int(resolved_speed or 0), max_allowed_speed))
+        use_blackening = 3
         if (caps.get("density") or {}).get("available"):
             density_caps = caps.get("density") or {}
-            density_min = int(density_caps.get("min", 0) or 0)
-            density_max = int(density_caps.get("max", 5) or 5)
-            density_default = int(density_caps.get("default", 1) or 1)
-            density_value = self.printer_profile.energy if self.printer_profile and self.printer_profile.energy not in (None, 0) else density_default
-            use_density = max(density_min, min(int(density_value or density_default), density_max))
+            density_min = int(density_caps.get("min", 1))
+            density_max = int(density_caps.get("max", 5))
+            density_default = density_caps.get("default")
+            density_override = (
+                self.printer_profile.energy
+                if self.printer_profile
+                and self.printer_profile.energy not in (None, 0)
+                else None
+            )
+            density_value = density_override if density_override is not None else density_default
+            use_density = (
+                None
+                if density_value is None
+                else max(density_min, min(int(density_value), density_max))
+            )
             use_energy = hardware_default_energy
+            if protocol_family is ProtocolFamily.V5G and use_density is not None:
+                use_blackening = _blackening_level_for_density(
+                    use_density,
+                    _image_density_levels(self.model),
+                )
+                use_energy = _energy_for_blackening_level(
+                    self.model,
+                    use_blackening,
+                    hardware_default_energy,
+                )
+                use_energy = max(min_allowed_energy, min(use_energy, max_allowed_energy))
+            elif use_density is not None:
+                use_blackening = use_density
         else:
             use_density = None
             use_energy = max(min_allowed_energy, min(int(resolved_energy or hardware_default_energy), max_allowed_energy))
@@ -304,7 +368,7 @@ class GenericClient(BasePrinterClient):
                 speed=use_speed,
                 energy=use_energy,
                 density=use_density,
-                blackening=use_density if use_density is not None else 3,
+                blackening=use_blackening,
                 feed_padding=current_feed,
                 image_pipeline=pipeline_config,
                 paper_mode=paper_mode,

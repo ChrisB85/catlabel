@@ -4,6 +4,7 @@ from ..manifest import VendorManifest
 from .client import GenericClient
 from .models import PrinterModelRegistry
 from ..utils import _registry_models, extract_raw_hardware_info
+from ...protocol.families.v5g import V5G_DENSITY_MAX, V5G_DENSITY_MIN
 
 
 class GenericManifest(VendorManifest):
@@ -25,22 +26,29 @@ class GenericManifest(VendorManifest):
             "v5c",
         }:
             if protocol_family == "v5g":
-                density_max = int(raw_info.get("max_density") or 200)
-                density_default = int(
-                    raw_info.get("default_density") or min(100, density_max)
-                )
+                density_capability = {
+                    "available": True,
+                    "min": V5G_DENSITY_MIN,
+                    "max": V5G_DENSITY_MAX,
+                    "default": raw_info.get("default_density"),
+                    "recommended_min": raw_info.get("min_density"),
+                    "recommended_max": raw_info.get("max_density"),
+                    "allow_auto": True,
+                    "scale": "raw",
+                }
             else:
-                density_max = 5
-                density_default = 3
+                density_capability = {
+                    "available": True,
+                    "min": 1,
+                    "max": 5,
+                    "default": 3,
+                    "allow_auto": False,
+                    "scale": "level",
+                }
             return {
                 "speed": {"available": False},
                 "energy": {"available": False},
-                "density": {
-                    "available": True,
-                    "min": 1,
-                    "max": density_max,
-                    "default": density_default,
-                },
+                "density": density_capability,
                 "feed": {"available": True, "default": 0},
             }
         return {

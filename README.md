@@ -112,7 +112,7 @@ The sidebar contains a file tree to save your designs.
 
 ### 7. Printer Settings (Hardware Overrides)
 In the **Canvas & Printer** tab, you can override default hardware behaviors:
-*   **Density / Energy:** Increase this value to make prints darker (useful for transparent or synthetic label stock), or decrease it if the print head is smudging.
+*   **Density / Energy:** Increase this value to make prints darker (useful for transparent or synthetic label stock), or decrease it if the print head is smudging. V5G printers accept raw density overrides from 1–200; `0` keeps the model default. The UI also shows the model-tuned range, and the runtime may reduce an override while the print head is hot.
 *   **Feed Lines:** Controls how much blank tape is ejected after a print job to align the cut with the printer's tear-off teeth.
 *   **Split Mode:** Allows you to define a canvas larger than the printer's physical width. The app will slice the image and print it in sequential strips.
 

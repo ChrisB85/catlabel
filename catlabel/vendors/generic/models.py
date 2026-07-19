@@ -204,11 +204,14 @@ class PrinterModel:
     runtime_variant: str | None = None
     runtime_density_profile_key: str | None = None
     runtime_density: Mapping[str, object] | None = None
+    profile_density: Mapping[str, object] | None = None
     runtime_capabilities: Mapping[str, object] = field(default_factory=dict)
     testing: bool = False
     testing_note: str | None = None
     vendor: str = "generic"
     media_type: str = "continuous"
+    min_density: int | None = None
+    default_density: int | None = None
     max_density: int | None = None
     max_speed: int | None = None
     min_energy: int | None = None
@@ -451,19 +454,29 @@ class PrinterModelRegistry:
                 if preset.paper_mode is not None
             )
         )
-        density_defaults = defaults.get("density") or {}
+        density_defaults = defaults.get("density") or None
         runtime_density = None if runtime_preset is None else runtime_preset.get("density")
-        maximum_density = max(
-            (
-                int(value)
-                for source in (runtime_density, density_defaults)
-                if source
-                for mode in source.values()
-                if isinstance(mode, Mapping)
-                for value in mode.values()
-            ),
-            default=None,
+        # Runtime presets override profile density in upstream. Keep the
+        # effective image tiers separate from the V5G wire-protocol ceiling:
+        # these are model-tuned defaults, not hard user-input limits.
+        effective_density = runtime_density or density_defaults
+        image_density = (
+            effective_density.get("image")
+            if isinstance(effective_density, Mapping)
+            else None
         )
+        density_values = (
+            [int(value) for value in image_density.values()]
+            if isinstance(image_density, Mapping)
+            else []
+        )
+        minimum_density = min(density_values, default=None)
+        default_density = (
+            _middle(image_density, 0)
+            if isinstance(image_density, Mapping)
+            else None
+        )
+        maximum_density = max(density_values, default=None)
 
         return PrinterModel(
             model_no=str(item["model_key"]),
@@ -502,7 +515,10 @@ class PrinterModelRegistry:
             runtime_variant=None if runtime_preset is None else runtime_preset.get("control_algorithm"),
             runtime_density_profile_key=None if runtime_key is None else str(runtime_key),
             runtime_density=runtime_density,
+            profile_density=density_defaults,
             runtime_capabilities={} if runtime_preset is None else dict(runtime_preset.get("capabilities") or {}),
+            min_density=minimum_density,
+            default_density=default_density,
             max_density=maximum_density,
             max_speed=max(image_speed, text_speed, 1),
             min_energy=max(1, _tier(image_energy, "low", 1)),

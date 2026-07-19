@@ -4,7 +4,9 @@ import unittest
 from collections import Counter
 
 from catlabel.protocol import ProtocolFamily
+from catlabel.vendors.generic.manifest import GenericManifest
 from catlabel.vendors.generic.models import DetectionRule, PrinterModelRegistry
+from catlabel.vendors.utils import extract_raw_hardware_info
 
 
 class GenericCatalogTests(unittest.TestCase):
@@ -95,6 +97,40 @@ class GenericCatalogTests(unittest.TestCase):
         self.assertEqual(model.protocol_family, ProtocolFamily.LEGACY)
         self.assertEqual(model.protocol_variant, "line_eight")
         self.assertEqual(model.paper_preset("a4sheet_1600r_1624p_24pl").left_padding_px, 24)
+
+    def test_v5g_tuned_density_is_not_reported_as_protocol_limit(self) -> None:
+        model = self.registry.get("mx11")
+        self.assertIsNotNone(model)
+        self.assertEqual(model.min_density, 100)
+        self.assertEqual(model.default_density, 130)
+        self.assertEqual(model.max_density, 150)
+
+        capabilities = GenericManifest()._build_capabilities(
+            extract_raw_hardware_info(model)
+        )
+        density = capabilities["density"]
+        self.assertEqual(density["min"], 1)
+        self.assertEqual(density["max"], 200)
+        self.assertEqual(density["default"], 130)
+        self.assertEqual(density["recommended_min"], 100)
+        self.assertEqual(density["recommended_max"], 150)
+        self.assertTrue(density["allow_auto"])
+
+    def test_profile_density_default_is_kept_without_runtime_preset(self) -> None:
+        model = self.registry.get("bq02_v5g")
+        self.assertIsNotNone(model)
+        self.assertIsNone(model.runtime_density)
+        self.assertEqual(model.default_density, 150)
+
+    def test_v5g_without_density_profile_keeps_auto_default(self) -> None:
+        model = self.registry.get("mx02")
+        self.assertIsNotNone(model)
+        capabilities = GenericManifest()._build_capabilities(
+            extract_raw_hardware_info(model)
+        )
+
+        self.assertIsNone(capabilities["density"]["default"])
+        self.assertEqual(capabilities["density"]["max"], 200)
 
 
 if __name__ == "__main__":

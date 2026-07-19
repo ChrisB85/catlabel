@@ -19,8 +19,8 @@ _FINISH_LATTICE = bytes.fromhex("AA55170000000000000017")
 _PRE_IMAGE_FEED_SPEED = 0x0A
 _POST_IMAGE_FEED_SPEED = 0x19
 _DENSITY_PAYLOAD_PREFIX = 0x01
-_DENSITY_MIN = 1
-_DENSITY_MAX = 200
+V5G_DENSITY_MIN = 1
+V5G_DENSITY_MAX = 200
 # Gray jobs are sent in 20-row compressed bands.
 _GRAY_BAND_ROWS = 20
 V5G_CONNECT_QUERY_PACKET = bytes.fromhex("5178A30001000000FF")
@@ -28,7 +28,7 @@ V5G_TEMPERATURE_QUERY_PACKET = bytes.fromhex("5178D30001000000FF")
 
 
 def encode_density_payload(density: int) -> bytes:
-    value = max(_DENSITY_MIN, min(_DENSITY_MAX, int(density)))
+    value = max(V5G_DENSITY_MIN, min(V5G_DENSITY_MAX, int(density)))
     return bytes([_DENSITY_PAYLOAD_PREFIX, value])
 
 

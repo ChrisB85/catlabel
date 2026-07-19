@@ -1324,12 +1324,15 @@ export const useStore = create(withHistory((set, get) => ({
 
       const profileEnergy = Number(profile?.energy);
       const hasProfileEnergy = profile?.energy !== null && profile?.energy !== undefined && Number.isFinite(profileEnergy);
+      const hasDensityOverride = hasProfileEnergy && profileEnergy > 0;
       const normalizedEnergy = caps.density?.available
-        ? clamp(
-            hasProfileEnergy ? profileEnergy : (caps.density.default ?? 3),
-            caps.density.min ?? 1,
-            caps.density.max ?? 8
-          )
+        ? (caps.density.allow_auto && !hasDensityOverride
+            ? 0
+            : clamp(
+                hasDensityOverride ? profileEnergy : (caps.density.default ?? caps.density.min ?? 1),
+                caps.density.min ?? 1,
+                caps.density.max ?? 8
+              ))
         : (caps.energy?.available
             ? clamp(
                 (profile?.energy > 0 ? profile.energy : caps.energy.default) || 5000,

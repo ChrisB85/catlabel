@@ -149,14 +149,6 @@ def extract_raw_hardware_info(model) -> dict:
             _safe_positive_int(getattr(model, "max_density", 0), 8),
             6,
         )
-    runtime_density = getattr(model, "runtime_density", None) or {}
-    image_density = runtime_density.get("image") if isinstance(runtime_density, dict) else None
-    default_density = (
-        int(image_density.get("middle"))
-        if isinstance(image_density, dict) and image_density.get("middle") is not None
-        else None
-    )
-
     return {
         "name": str(getattr(model, "head_name", "") or "").strip().strip("-_") or model_no,
         "vendor": vendor,
@@ -184,7 +176,8 @@ def extract_raw_hardware_info(model) -> dict:
             else max_speed
         ),
         "max_density": getattr(model, "max_density", None),
-        "default_density": default_density,
+        "min_density": getattr(model, "min_density", None),
+        "default_density": getattr(model, "default_density", None),
         "media_type": media_type,
         "protocol_family": str(protocol_family or "legacy"),
         "protocol_variant": protocol_variant,

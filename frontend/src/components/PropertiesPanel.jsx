@@ -153,6 +153,10 @@ export default function PropertiesPanel() {
   const maxEnergy = caps.energy?.max || 65535;
   const minDensity = caps.density?.min ?? 1;
   const maxDensity = caps.density?.max ?? 5;
+  const allowsAutomaticDensity = Boolean(caps.density?.allow_auto);
+  const usesRawDensity = caps.density?.scale === 'raw';
+  const recommendedMinDensity = caps.density?.recommended_min;
+  const recommendedMaxDensity = caps.density?.recommended_max;
 
   const [panelWidth, setPanelWidth] = useState(360);
 
@@ -315,7 +319,9 @@ export default function PropertiesPanel() {
     if (name === 'speed') {
       nextValue = Math.max(0, Math.min(nextValue, maxSpeed));
     } else if (name === 'energy') {
-      nextValue = Math.max(0, Math.min(nextValue, maxEnergy));
+      nextValue = caps.density?.available
+        ? Math.max(allowsAutomaticDensity ? 0 : minDensity, Math.min(nextValue, maxDensity))
+        : Math.max(0, Math.min(nextValue, maxEnergy));
     } else if (name === 'feed_lines') {
       nextValue = Math.max(0, nextValue);
     }
@@ -553,20 +559,46 @@ export default function PropertiesPanel() {
 
               {caps.density?.available && (
                 <div>
-                  <label className={labelClass}>Print Density ({minDensity} - {maxDensity})</label>
-                  <select
-                    name="energy"
-                    value={printerProfile?.energy ?? caps.density.default ?? 3}
-                    onChange={handleProfileChange}
-                    disabled={!selectedPrinter}
-                    className={inputClass}
-                  >
-                    {Array.from({ length: Math.max(0, maxDensity - minDensity + 1) }, (_, i) => minDensity + i).map((level) => (
-                      <option key={level} value={level}>
-                        {level} - {level <= 2 ? 'Light' : level >= (maxDensity - 1) ? 'Dark' : 'Normal'}
-                      </option>
-                    ))}
-                  </select>
+                  <label className={labelClass}>
+                    {usesRawDensity ? 'Print Density Override' : 'Print Darkness'} ({minDensity} - {maxDensity})
+                  </label>
+                  {usesRawDensity ? (
+                    <input
+                      type="number"
+                      name="energy"
+                      min={allowsAutomaticDensity ? 0 : minDensity}
+                      max={maxDensity}
+                      step={1}
+                      value={printerProfile?.energy ?? (allowsAutomaticDensity ? 0 : caps.density.default ?? minDensity)}
+                      onChange={handleProfileChange}
+                      disabled={!selectedPrinter}
+                      className={inputClass}
+                    />
+                  ) : (
+                    <select
+                      name="energy"
+                      value={printerProfile?.energy ?? caps.density.default ?? 3}
+                      onChange={handleProfileChange}
+                      disabled={!selectedPrinter}
+                      className={inputClass}
+                    >
+                      {Array.from({ length: Math.max(0, maxDensity - minDensity + 1) }, (_, i) => minDensity + i).map((level) => (
+                        <option key={level} value={level}>
+                          {level} - {level <= 2 ? 'Light' : level >= (maxDensity - 1) ? 'Dark' : 'Normal'}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {usesRawDensity && (
+                    <p className="text-[9px] text-neutral-400 mt-1">
+                      {allowsAutomaticDensity ? `0 = Auto${caps.density.default != null ? ` (${caps.density.default})` : ''}. ` : ''}
+                      Protocol range: {minDensity} - {maxDensity}.
+                      {recommendedMinDensity != null && recommendedMaxDensity != null
+                        ? ` Model-tuned range: ${recommendedMinDensity} - ${recommendedMaxDensity}.`
+                        : ' This model has no published tuned range.'}
+                      {' '}Thermal protection may reduce the effective density while the print head is hot.
+                    </p>
+                  )}
                 </div>
               )}
 

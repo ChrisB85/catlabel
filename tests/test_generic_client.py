@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, patch
 from PIL import Image
 
 from catlabel.printing.runtime.v5g import V5GRuntimeController
+from catlabel.protocol.family import ProtocolFamily
+from catlabel.protocol.packet import prefixed_packet_opcode, prefixed_packet_payload, split_prefixed_packets
 from catlabel.vendors.generic.client import GenericClient
 from catlabel.vendors.generic.manifest import GenericManifest
 from catlabel.transport.bluetooth.types import DeviceTransport
@@ -73,6 +75,58 @@ class GenericClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreaterEqual(len(backend.attached), 1)
         self.assertTrue(
             all(controller is client._runtime_context.runtime_controller for controller in backend.attached)
+        )
+
+    async def test_v5g_raw_density_uses_high_energy_and_quality_together(self) -> None:
+        device = SimpleNamespace(name="MX11", address="00:11:22:33:44:55")
+        hardware = GenericManifest().identify_device(device.name, device, device.address)
+        self.assertIsNotNone(hardware)
+        profile = SimpleNamespace(speed=None, energy=200, feed_lines=0, paper_mode=None)
+        settings = SimpleNamespace(speed=0, energy=0, feed_lines=0)
+        client = GenericClient(device, hardware, profile, settings)
+        backend = _Backend()
+        client.backend = backend
+        image = Image.new("RGB", (hardware["width_px"], 1), "white")
+
+        await client.print_images([image], dither=False)
+
+        packets = split_prefixed_packets(backend.writes[0][0], ProtocolFamily.V5G)
+        self.assertIsNotNone(packets)
+        by_opcode = {
+            prefixed_packet_opcode(packet, ProtocolFamily.V5G): packet
+            for packet in packets
+        }
+        self.assertEqual(
+            prefixed_packet_payload(by_opcode[0xF2], ProtocolFamily.V5G),
+            b"\x01\xc8",
+        )
+        self.assertEqual(
+            prefixed_packet_payload(by_opcode[0xAF], ProtocolFamily.V5G),
+            (15000).to_bytes(2, "little"),
+        )
+        self.assertEqual(
+            prefixed_packet_payload(by_opcode[0xA4], ProtocolFamily.V5G),
+            b"\x35",
+        )
+
+    async def test_v5g_auto_omits_density_when_model_has_no_profile(self) -> None:
+        device = SimpleNamespace(name="MX02", address="00:11:22:33:44:55")
+        hardware = GenericManifest().identify_device(device.name, device, device.address)
+        self.assertIsNotNone(hardware)
+        profile = SimpleNamespace(speed=None, energy=0, feed_lines=0, paper_mode=None)
+        settings = SimpleNamespace(speed=0, energy=0, feed_lines=0)
+        client = GenericClient(device, hardware, profile, settings)
+        backend = _Backend()
+        client.backend = backend
+        image = Image.new("RGB", (hardware["width_px"], 1), "white")
+
+        await client.print_images([image], dither=False)
+
+        packets = split_prefixed_packets(backend.writes[0][0], ProtocolFamily.V5G)
+        self.assertIsNotNone(packets)
+        self.assertNotIn(
+            0xF2,
+            [prefixed_packet_opcode(packet, ProtocolFamily.V5G) for packet in packets],
         )
 
 
