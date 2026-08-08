@@ -6,6 +6,7 @@ import shutil
 
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlmodel import Session, select
@@ -16,6 +17,7 @@ from ..core.models import Font, Settings, Address, LabelPreset, Project, Categor
 from ..core.paths import fonts_dir
 from ..services.layout_engine import TEMPLATE_METADATA
 
+from .ingress import ingress_only_enabled, is_allowed_client
 from .routes_print import router as print_router
 from .routes_project import router as project_router
 from .routes_ai import router as ai_router
@@ -91,6 +93,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+if ingress_only_enabled():
+    @app.middleware("http")
+    async def restrict_to_ingress(request, call_next):
+        client_host = request.client.host if request.client else None
+        if not is_allowed_client(client_host):
+            return JSONResponse({"detail": "Forbidden"}, status_code=403)
+        return await call_next(request)
 
 app.include_router(print_router)
 app.include_router(project_router)
