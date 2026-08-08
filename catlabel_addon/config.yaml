@@ -1,0 +1,16 @@
+name: CatLabel Studio
+version: "0.1.0"
+slug: catlabel
+description: Design and print labels on Bluetooth thermal printers
+url: https://github.com/ChrisB85/catlabel
+arch:
+  - amd64
+init: false
+startup: application
+boot: manual
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:tag-text
+panel_title: CatLabel
+host_dbus: true
+udev: true

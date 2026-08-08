@@ -46,6 +46,15 @@ https://github.com/user-attachments/assets/4e784645-0ccf-478c-a6e1-0c41a3519624
 
 *The app runs at [http://localhost:8000](http://localhost:8000).*
 
+### Home Assistant
+CatLabel can run as a Home Assistant add-on, printing over the Bluetooth adapter attached to your Home Assistant machine.
+
+1. In Home Assistant, go to Settings → Add-ons → Add-on store → ⋮ → Repositories.
+2. Add this repository's URL.
+3. Install **CatLabel Studio** and start it. The interface appears in the sidebar.
+
+The add-on requires Home Assistant OS or Supervised on `amd64`, and shares the Bluetooth adapter with the Home Assistant Bluetooth integration. See `catlabel_addon/README.md` for details.
+
 ---
 
 ## Instruction Manual & Features
