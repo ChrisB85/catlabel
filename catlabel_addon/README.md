@@ -25,5 +25,8 @@ updates.
 
 ## Updating
 
-The image is built from the repository on GitHub, not from a local copy. Push
-your changes, bump `version` in `config.yaml`, then rebuild the add-on.
+The image is built from the repository on GitHub, not from a local copy.
+Merging to `master` is the release step. Then bump `version` in
+`config.yaml` and rebuild: the version is passed as a build arg, so the bump
+invalidates the Docker layer that clones the repo and forces a real refetch
+of `master`.

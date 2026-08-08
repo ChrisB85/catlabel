@@ -5,7 +5,6 @@ description: Design and print labels on Bluetooth thermal printers
 url: https://github.com/ChrisB85/catlabel
 arch:
   - amd64
-init: false
 startup: application
 boot: manual
 ingress: true

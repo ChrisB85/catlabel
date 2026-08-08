@@ -7,6 +7,10 @@ ARG BUILD_FROM
 # Bump to build from a tag or branch other than the default.
 ARG CATLABEL_REF=master
 
+# Supervisor passes the add-on version on every build; declaring it here makes
+# a version bump invalidate the clone layer, so a rebuild really refetches.
+ARG BUILD_VERSION
+
 ENV PYTHONUNBUFFERED=1 \
     CATLABEL_PORT=8099 \
     CATLABEL_DATA_DIR=/data \
