@@ -83,21 +83,27 @@ class PhomemoManifest(VendorManifest):
         if not normalized:
             return None
 
-        candidate_names = [normalized]
+        # The model name behind a vendor prefix is the specific one, so it is tried
+        # first: "MR.IN_M02S" is an M02, not the M200 that claims the "MR.IN" prefix.
+        candidate_names = []
         for vendor_prefix in ("PHOMEMO ", "PHOMEMO-", "MR.IN ", "MR.IN-", "MR.IN"):
             if normalized.startswith(vendor_prefix):
-                stripped = normalized[len(vendor_prefix) :].strip()
+                stripped = normalized[len(vendor_prefix) :].strip().lstrip("._- ")
                 if stripped:
                     candidate_names.append(stripped)
+        candidate_names.append(normalized)
 
-        for model in self.get_supported_models():
-            prefixes = self._model_prefixes(model["model_id"])
-            if any(
-                candidate.startswith(prefix)
-                for candidate in dict.fromkeys(candidate_names)
-                for prefix in prefixes
-            ):
-                return model
+        for candidate in dict.fromkeys(candidate_names):
+            match = None
+            matched_length = -1
+            for model in self.get_supported_models():
+                for prefix in self._model_prefixes(model["model_id"]):
+                    # Longest prefix wins, otherwise "M02 PRO" is claimed by "M02".
+                    if candidate.startswith(prefix) and len(prefix) > matched_length:
+                        match = model
+                        matched_length = len(prefix)
+            if match:
+                return match
         return None
 
     def get_client(self, device, hardware_info: dict, profile, settings):
