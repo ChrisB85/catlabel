@@ -5,6 +5,11 @@ import time
 import webbrowser
 
 
+def browser_launch_enabled() -> bool:
+    """The add-on runs headless, so the browser launch is switched off there."""
+    return not os.environ.get("CATLABEL_NO_BROWSER")
+
+
 def open_browser_when_ready(
     server,
     port: int,
@@ -35,11 +40,12 @@ def main() -> None:
         reload=False,
     )
     server = uvicorn.Server(config)
-    threading.Thread(
-        target=open_browser_when_ready,
-        args=(server, port),
-        daemon=True,
-    ).start()
+    if browser_launch_enabled():
+        threading.Thread(
+            target=open_browser_when_ready,
+            args=(server, port),
+            daemon=True,
+        ).start()
     server.run()
 
 
