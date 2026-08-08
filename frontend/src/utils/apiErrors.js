@@ -1,3 +1,5 @@
+import { resolveUrl } from './ingress';
+
 export class ApiRequestError extends Error {
   constructor(message, details = {}) {
     super(message);
@@ -53,7 +55,7 @@ export const checkServerHealth = async () => {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 2000);
   try {
-    const response = await fetch('/api/health', {
+    const response = await fetch(resolveUrl('/api/health'), {
       cache: 'no-store',
       signal: controller.signal,
     });

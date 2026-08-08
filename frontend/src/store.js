@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { calculateAutoFitItem } from './utils/rendering';
 import { describePrintError } from './utils/apiErrors';
 import { apiFetch, apiJson, isArrayPayload, isObjectPayload } from './utils/apiClient';
+import { resolveUrl } from './utils/ingress';
 import { buildLabelTemplateMarkup } from './components/templateStyles';
 import { normalizePageIndex } from './utils/canvasPages';
 import {
@@ -1066,7 +1067,7 @@ export const useStore = create(withHistory((set, get) => ({
         const fontName = font.name.split('.')[0].replace(/[^\w -]/g, '').trim();
         const filePath = font.file_path.replace(/\\/g, '/').replace(/^\/+/, '');
         if (!fontName || filePath.includes('..') || /["'()\r\n]/.test(filePath)) return;
-        css += `@font-face { font-family: '${fontName}'; src: url('/${encodeURI(filePath)}'); }\n`;
+        css += `@font-face { font-family: '${fontName}'; src: url('${resolveUrl('/' + encodeURI(filePath))}'); }\n`;
       });
       style.appendChild(document.createTextNode(css));
       document.head.appendChild(style);

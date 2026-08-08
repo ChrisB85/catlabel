@@ -3,6 +3,7 @@ import { useStore } from '../store';
 import { useShallow } from 'zustand/react/shallow';
 import { useDialogAccessibility } from '../utils/useDialogAccessibility';
 import { apiFetch } from '../utils/apiClient';
+import { resolveUrl } from '../utils/ingress';
 import { Printer, Sparkles, Search, ChevronRight, Loader2, Bot, ArrowLeft, CheckCircle, Globe, Tag } from 'lucide-react';
 
 export default function OnboardingWizard() {
@@ -150,7 +151,7 @@ export default function OnboardingWizard() {
                   
                   {/* Logo Card */}
                   <div className="flex flex-col items-center justify-center gap-3 p-6 border-2 border-neutral-100 dark:border-neutral-800 rounded-xl bg-neutral-50 dark:bg-neutral-900/50">
-                    <img src="/logo.webp" alt="CatLabel" className="w-16 h-16 drop-shadow-md" draggable={false} />
+                    <img src={resolveUrl('/logo.webp')} alt="CatLabel" className="w-16 h-16 drop-shadow-md" draggable={false} />
                     <div className="text-center">
                       <h3 className="font-serif font-bold text-sm dark:text-white tracking-tight">CatLabel Studio</h3>
                       <p className="text-[10px] text-neutral-500 mt-1 uppercase tracking-widest">Setup Wizard</p>

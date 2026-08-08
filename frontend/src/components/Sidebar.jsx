@@ -7,6 +7,7 @@ import PrinterDropdown from './PrinterDropdown';
 import PresetPickerModal from './PresetPickerModal';
 import { getPageIndices } from '../utils/canvasPages';
 import { apiFetch } from '../utils/apiClient';
+import { resolveUrl } from '../utils/ingress';
 import {
   ChevronDown, ChevronRight, LayoutTemplate,
   Menu, Printer, Wifi, Archive
@@ -112,7 +113,7 @@ export default function Sidebar() {
         {!isSidebarCollapsed && (
           <div className="flex items-center gap-3 min-w-0">
             <img
-              src="/logo.webp"
+              src={resolveUrl('/logo.webp')}
               alt="CatLabel logo"
               className="w-9 h-9 object-contain shrink-0"
               draggable={false}

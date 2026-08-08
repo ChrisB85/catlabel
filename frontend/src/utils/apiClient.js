@@ -1,4 +1,5 @@
 import { ApiRequestError, apiErrorFromResponse } from './apiErrors';
+import { resolveUrl } from './ingress';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -23,7 +24,7 @@ export const apiFetch = async (input, init = {}, options = {}) => {
     : null;
 
   try {
-    const response = await fetch(input, { ...init, signal: controller.signal });
+    const response = await fetch(resolveUrl(input), { ...init, signal: controller.signal });
     if (!response.ok) {
       throw await apiErrorFromResponse(response, options.fallback || 'Request failed');
     }
