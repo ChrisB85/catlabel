@@ -13,6 +13,7 @@ import pypdfium2 as pdfium
 
 from ..core.database import create_db_and_tables, engine
 from ..core.models import Font, Settings, Address, LabelPreset, Project, Category
+from ..core.paths import fonts_dir
 from ..services.layout_engine import TEMPLATE_METADATA
 
 from .routes_print import router as print_router
@@ -47,18 +48,18 @@ def download_default_fonts():
         "BebasNeue.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/bebasneue/BebasNeue-Regular.ttf",
         "PlayfairDisplay.ttf": "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf"
     }
-    os.makedirs("data/fonts", exist_ok=True)
-    
+    os.makedirs(fonts_dir(), exist_ok=True)
+
     if os.path.exists("fonts"):
         for filename in os.listdir("fonts"):
             if filename.lower().endswith((".ttf", ".otf")):
                 src = os.path.join("fonts", filename)
-                dst = os.path.join("data/fonts", filename)
+                dst = os.path.join(fonts_dir(), filename)
                 if not os.path.exists(dst):
                     shutil.copy2(src, dst)
 
     for filename, url in fonts.items():
-        target = os.path.join("data/fonts", filename)
+        target = os.path.join(fonts_dir(), filename)
         if not os.path.exists(target):
             print(f"Downloading Variable Font: {filename}...")
             temporary_target = f"{target}.download"
@@ -81,8 +82,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="CatLabel Server", lifespan=lifespan)
 
-os.makedirs("data/fonts", exist_ok=True)
-app.mount("/fonts", StaticFiles(directory="data/fonts"), name="fonts")
+os.makedirs(fonts_dir(), exist_ok=True)
+app.mount("/fonts", StaticFiles(directory=fonts_dir()), name="fonts")
 
 app.add_middleware(
     CORSMiddleware,
@@ -217,9 +218,9 @@ def update_settings(new_settings: Settings):
 
 @app.post("/api/fonts")
 def upload_font(file: UploadFile = File(...)):
-    os.makedirs("data/fonts", exist_ok=True)
+    os.makedirs(fonts_dir(), exist_ok=True)
     safe_filename = os.path.basename(file.filename)
-    file_path = f"data/fonts/{safe_filename}"
+    file_path = os.path.join(fonts_dir(), safe_filename)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
@@ -232,10 +233,10 @@ def upload_font(file: UploadFile = File(...)):
 
 @app.get("/api/fonts")
 def list_fonts():
-    os.makedirs("data/fonts", exist_ok=True)
+    os.makedirs(fonts_dir(), exist_ok=True)
     with Session(engine) as session:
         db_fonts = {f.name: f for f in session.exec(select(Font)).all()}
-        disk_fonts = [f for f in os.listdir("data/fonts") if f.lower().endswith((".ttf", ".otf"))]
+        disk_fonts = [f for f in os.listdir(fonts_dir()) if f.lower().endswith((".ttf", ".otf"))]
         
         new_fonts = []
         for f in disk_fonts:

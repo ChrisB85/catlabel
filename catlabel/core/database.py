@@ -1,8 +1,10 @@
 from sqlmodel import SQLModel, create_engine
 import os
 
-os.makedirs("data", exist_ok=True)
-sqlite_file_name = "data/catlabel.db"
+from .paths import data_dir
+
+os.makedirs(data_dir(), exist_ok=True)
+sqlite_file_name = os.path.join(data_dir(), "catlabel.db")
 sqlite_url = f"sqlite:///{sqlite_file_name}"
 engine = create_engine(sqlite_url, echo=False, connect_args={"check_same_thread": False})
 
