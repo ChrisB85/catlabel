@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from typing import List
 
 from fastapi import HTTPException
@@ -10,6 +11,8 @@ from ...rendering.renderer import image_to_raster
 from ...protocol.encoding import pack_line
 from ...transport.bluetooth import SppBackend, DeviceInfo, DeviceTransport
 from ...raster import PixelFormat
+
+logger = logging.getLogger(__name__)
 from ...devices import get_ble_transport_profile
 
 
@@ -107,6 +110,7 @@ class PhomemoClient(BasePrinterClient):
 
         for img in images:
             working_image = img.copy()
+            source_size = working_image.size
 
             if dpi > 203:
                 scale_factor = dpi / 203.0
@@ -129,6 +133,18 @@ class PhomemoClient(BasePrinterClient):
             # prints from the raster's own edge, so a narrow label is centred here.
             if "tspl" not in protocol:
                 working_image = self._center_on_print_width(working_image, print_width_px)
+
+            logger.info(
+                "Phomemo raster: model=%s protocol=%s head=%dpx dpi=%d source=%dx%d sent=%dx%d",
+                self.hardware_info.get("model_id"),
+                protocol,
+                print_width_px,
+                dpi,
+                source_size[0],
+                source_size[1],
+                working_image.width,
+                working_image.height,
+            )
 
             if "tspl" in protocol:
                 await self._print_tspl(working_image, width_bytes, density, dither=False)
