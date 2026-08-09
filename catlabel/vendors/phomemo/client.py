@@ -146,13 +146,21 @@ class PhomemoClient(BasePrinterClient):
             elif protocol.split("_")[-1] == "d":
                 await self._print_d_series(working_image, density, dither=dither)
             elif "m02" in protocol:
-                await self._print_m02(working_image, width_bytes, density, dither=dither)
+                await self._print_m02(working_image, width_bytes, density, feed, dither=dither)
             elif "m04" in protocol:
                 await self._print_m04(working_image, width_bytes, density, feed, dither=dither)
             elif "m110" in protocol:
                 await self._print_m110(working_image, width_bytes, density, dither=dither)
             else:
                 await self._print_m_series(working_image, width_bytes, density, feed, dither=dither)
+
+    async def _feed(self, dots: int) -> None:
+        """ESC J carries the distance in a single byte, so long feeds are repeated."""
+        remaining = max(0, int(dots))
+        while remaining > 0:
+            step = min(255, remaining)
+            await self._send(CMD.FEED(step))
+            remaining -= step
 
     async def _print_m_series(self, img: Image.Image, width_bytes: int, density: int, feed: int, dither: bool = True) -> None:
         raster_data, packed_width_bytes, height_lines = self._render_to_raster(img, dither=dither)
@@ -163,10 +171,10 @@ class PhomemoClient(BasePrinterClient):
         await self._send(CMD.RASTER_HEADER(packed_width_bytes, height_lines))
         await self._send(raster_data)
         await asyncio.sleep(0.3)
-        await self._send(CMD.FEED(feed))
+        await self._feed(feed)
         await asyncio.sleep(0.5)
 
-    async def _print_m02(self, img: Image.Image, width_bytes: int, density: int, dither: bool = True) -> None:
+    async def _print_m02(self, img: Image.Image, width_bytes: int, density: int, feed: int, dither: bool = True) -> None:
         raster_data, packed_width_bytes, height_lines = self._render_to_raster(img, dither=dither)
         await self._send(M02_CMD.PREFIX)
         await asyncio.sleep(0.05)
@@ -177,7 +185,7 @@ class PhomemoClient(BasePrinterClient):
         await self._send(CMD.RASTER_HEADER(packed_width_bytes, height_lines))
         await self._send(raster_data)
         await asyncio.sleep(0.3)
-        await self._send(CMD.FEED(8))
+        await self._feed(feed)
         await asyncio.sleep(0.5)
 
     async def _print_m04(self, img: Image.Image, width_bytes: int, density: int, feed: int, dither: bool = True) -> None:
