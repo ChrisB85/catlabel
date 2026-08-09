@@ -192,7 +192,7 @@ export default function OnboardingWizard() {
                         <button type="button" key={p.address} onClick={() => selectPrinter(p)} className="w-full px-4 py-3 flex justify-between items-center cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 border-t border-neutral-100 dark:border-neutral-800 transition-colors text-left">
                           <div>
                             <div className="font-bold dark:text-white text-sm">{p.name || p.display_address}</div>
-                            <div className="text-xs text-neutral-500">{p.width_mm}mm • {p.media_type}</div>
+                            <div className="text-xs text-neutral-500">{p.width_mm}mm print • {p.media_type}</div>
                           </div>
                           <ChevronRight className="text-blue-500" size={16} />
                         </button>

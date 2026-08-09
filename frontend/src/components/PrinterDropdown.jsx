@@ -31,7 +31,7 @@ export default function PrinterDropdown({ printers, manualPrinters, selectedPrin
             <>
               <div className={`w-2 h-2 rounded-full shrink-0 ${selectedData.transport === 'offline' ? 'bg-neutral-300 dark:bg-neutral-600' : 'bg-green-500'}`} />
               <span className="truncate font-bold uppercase tracking-wider">
-                {selectedData.name || selectedData.display_address} ({selectedData.width_mm}mm)
+                {selectedData.name || selectedData.display_address} ({selectedData.width_mm}mm print)
               </span>
             </>
           ) : (
@@ -58,7 +58,7 @@ export default function PrinterDropdown({ printers, manualPrinters, selectedPrin
                   >
                     <div className="flex items-center gap-2 truncate">
                       <div className="w-2 h-2 rounded-full shrink-0 bg-green-500" />
-                      <span className="truncate font-bold uppercase tracking-wider">{p.name || p.display_address} ({p.width_mm}mm)</span>
+                      <span className="truncate font-bold uppercase tracking-wider">{p.name || p.display_address} ({p.width_mm}mm print)</span>
                     </div>
                   </button>
                 ))}
@@ -80,7 +80,7 @@ export default function PrinterDropdown({ printers, manualPrinters, selectedPrin
                       className="flex-1 flex items-center gap-2 truncate py-1"
                     >
                       <div className="w-2 h-2 rounded-full shrink-0 bg-neutral-300 dark:bg-neutral-600" />
-                      <span className="truncate font-bold uppercase tracking-wider">{p.name} ({p.width_mm}mm)</span>
+                      <span className="truncate font-bold uppercase tracking-wider">{p.name} ({p.width_mm}mm print)</span>
                     </button>
                     <button
                       onClick={(e) => {
