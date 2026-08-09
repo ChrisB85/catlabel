@@ -50,6 +50,20 @@ class PhomemoClient(BasePrinterClient):
     async def _send(self, data: bytes) -> None:
         await self.transport.write(data, chunk_size=128, interval_ms=20)
 
+    @staticmethod
+    def _center_on_print_width(img: Image.Image, print_width_px: int) -> Image.Image:
+        """Centre a narrow label on the head.
+
+        The raster header carries the image's own width, and the printer puts the
+        whole difference on one side, so a label narrower than the head prints
+        off-centre by half of it.
+        """
+        if img.width >= print_width_px:
+            return img
+        canvas = Image.new("RGB", (print_width_px, img.height), "white")
+        canvas.paste(img.convert("RGB"), ((print_width_px - img.width) // 2, 0))
+        return canvas
+
     def _render_to_raster(self, img, rotate_cw=False, invert=False, dither=True):
         if rotate_cw:
             img = img.rotate(-90, expand=True)
@@ -110,6 +124,11 @@ class PhomemoClient(BasePrinterClient):
                     (print_width_px, new_height),
                     Image.Resampling.LANCZOS,
                 )
+
+            # TSPL places the bitmap with its own coordinates; every other protocol
+            # prints from the raster's own edge, so a narrow label is centred here.
+            if "tspl" not in protocol:
+                working_image = self._center_on_print_width(working_image, print_width_px)
 
             if "tspl" in protocol:
                 await self._print_tspl(working_image, width_bytes, density, dither=False)
