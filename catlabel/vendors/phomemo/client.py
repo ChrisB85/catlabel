@@ -112,15 +112,8 @@ class PhomemoClient(BasePrinterClient):
             working_image = img.copy()
             source_size = working_image.size
 
-            if dpi > 203:
-                scale_factor = dpi / 203.0
-                scaled_width = max(1, int(round(working_image.width * scale_factor)))
-                scaled_height = max(1, int(round(working_image.height * scale_factor)))
-                working_image = working_image.resize(
-                    (scaled_width, scaled_height),
-                    Image.Resampling.LANCZOS,
-                )
-
+            # The canvas is already rendered at the printer's own dpi, so rescaling
+            # it here by dpi/203 stretched every 300 dpi label to the full head.
             if working_image.width > print_width_px and not split_mode:
                 ratio = print_width_px / float(working_image.width)
                 new_height = max(1, int(round(working_image.height * ratio)))

@@ -81,24 +81,40 @@ class PrintImageAlignmentTests(unittest.TestCase):
         self.client._print_m02 = capture
 
     def test_label_narrower_than_the_head_is_centered_before_printing(self) -> None:
-        # A 48 mm design is rendered at 203 dpi, so 384 px, and upscaled to 300 dpi.
-        asyncio.run(self.client.print_images([_black(384, 10)]))
+        # The canvas is rendered at the printer's own dpi, so a 48 mm design on a
+        # 300 dpi head arrives as 567 px and must keep that size.
+        asyncio.run(self.client.print_images([_black(567, 10)]))
 
         self.assertEqual(len(self.printed), 1)
         self.assertEqual(self.printed[0].width, 624)
 
         printed = self.printed[0].convert("RGB")
+        left_pad = (624 - 567) // 2
         self.assertEqual(printed.getpixel((0, 0)), (255, 255, 255))
         self.assertEqual(printed.getpixel((623, 0)), (255, 255, 255))
-        self.assertEqual(printed.getpixel((312, 0)), (0, 0, 0))
+        self.assertEqual(printed.getpixel((left_pad, 0)), (0, 0, 0))
+        self.assertEqual(printed.getpixel((left_pad + 566, 0)), (0, 0, 0))
+
+    def test_a_300_dpi_head_does_not_rescale_the_rendered_canvas(self) -> None:
+        asyncio.run(self.client.print_images([_black(567, 10)]))
+
+        printed = self.printed[0].convert("RGB")
+        black_columns = [x for x in range(624) if printed.getpixel((x, 0)) == (0, 0, 0)]
+        self.assertEqual(len(black_columns), 567)
+        self.assertEqual(self.printed[0].height, 10)
 
     def test_full_width_label_is_not_padded(self) -> None:
-        asyncio.run(self.client.print_images([_black(422, 10)]))
+        asyncio.run(self.client.print_images([_black(624, 10)]))
 
         self.assertEqual(self.printed[0].width, 624)
         printed = self.printed[0].convert("RGB")
         self.assertEqual(printed.getpixel((0, 0)), (0, 0, 0))
         self.assertEqual(printed.getpixel((623, 0)), (0, 0, 0))
+
+    def test_label_wider_than_the_head_is_still_scaled_down(self) -> None:
+        asyncio.run(self.client.print_images([_black(800, 10)]))
+
+        self.assertEqual(self.printed[0].width, 624)
 
 
 if __name__ == "__main__":
