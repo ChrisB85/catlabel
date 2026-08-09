@@ -154,6 +154,14 @@ class PhomemoClient(BasePrinterClient):
             else:
                 await self._print_m_series(working_image, width_bytes, density, feed, dither=dither)
 
+    @staticmethod
+    def _append_blank_rows(img: Image.Image, rows: int) -> Image.Image:
+        if rows <= 0:
+            return img
+        padded = Image.new("RGB", (img.width, img.height + rows), "white")
+        padded.paste(img.convert("RGB"), (0, 0))
+        return padded
+
     async def _feed(self, dots: int) -> None:
         """ESC J carries the distance in a single byte, so long feeds are repeated."""
         remaining = max(0, int(dots))
@@ -175,6 +183,12 @@ class PhomemoClient(BasePrinterClient):
         await asyncio.sleep(0.5)
 
     async def _print_m02(self, img: Image.Image, width_bytes: int, density: int, feed: int, dither: bool = True) -> None:
+        # Measured on an M02 Pro: only the first ESC J after a raster moves the paper,
+        # so 255+45 and 255+165 dots advanced it by exactly the same distance. Anything
+        # past one command is fed as blank rows, which the raster path always honours.
+        direct_feed = min(255, max(0, feed))
+        img = self._append_blank_rows(img, max(0, feed - direct_feed))
+
         raster_data, packed_width_bytes, height_lines = self._render_to_raster(img, dither=dither)
         await self._send(M02_CMD.PREFIX)
         await asyncio.sleep(0.05)
@@ -185,7 +199,7 @@ class PhomemoClient(BasePrinterClient):
         await self._send(CMD.RASTER_HEADER(packed_width_bytes, height_lines))
         await self._send(raster_data)
         await asyncio.sleep(0.3)
-        await self._feed(feed)
+        await self._feed(direct_feed)
         await asyncio.sleep(0.5)
 
     async def _print_m04(self, img: Image.Image, width_bytes: int, density: int, feed: int, dither: bool = True) -> None:

@@ -25,6 +25,12 @@ def _feed_amounts(sent: list[bytes]) -> list[int]:
     return [packet[2] for packet in sent if len(packet) == 3 and packet[:2] == b"\x1b\x4a"]
 
 
+def _raster_height(sent: list[bytes]) -> int:
+    headers = [p for p in sent if len(p) == 8 and p[:4] == b"\x1d\x76\x30\x00"]
+    assert len(headers) == 1, f"expected one raster header, got {len(headers)}"
+    return headers[0][6] | (headers[0][7] << 8)
+
+
 class PhomemoFeedTests(unittest.TestCase):
     def _client(self, hardware_info: dict, feed_lines) -> PhomemoClient:
         client = PhomemoClient(
@@ -47,13 +53,12 @@ class PhomemoFeedTests(unittest.TestCase):
 
         self.assertEqual(_feed_amounts(self.sent), [200])
 
-    def test_long_feeds_are_split_across_commands(self) -> None:
+    def test_m02_never_sends_more_than_one_feed_command(self) -> None:
         client = self._client(dict(M02_PRO), 600)
         asyncio.run(client.print_images([Image.new("RGB", (576, 8), "white")]))
 
-        amounts = _feed_amounts(self.sent)
-        self.assertEqual(amounts, [255, 255, 90])
-        self.assertEqual(sum(amounts), 600)
+        self.assertEqual(_feed_amounts(self.sent), [255])
+        self.assertEqual(_raster_height(self.sent), 8 + 345)
 
     def test_m_series_also_splits_long_feeds(self) -> None:
         hardware_info = dict(M02_PRO, model_id="M220", protocol_family="phomemo_m", dpi=203, width_px=576)
@@ -61,6 +66,22 @@ class PhomemoFeedTests(unittest.TestCase):
         asyncio.run(client.print_images([Image.new("RGB", (576, 8), "white")]))
 
         self.assertEqual(_feed_amounts(self.sent), [255, 45])
+
+    def test_feed_beyond_one_command_is_added_as_blank_rows(self) -> None:
+        # The M02 firmware honours only the first ESC J after a raster, measured on
+        # the hardware: 255+45 and 255+165 advanced the paper by the same amount.
+        client = self._client(dict(M02_PRO), 420)
+        asyncio.run(client.print_images([Image.new("RGB", (576, 120), "white")]))
+
+        self.assertEqual(_feed_amounts(self.sent), [255])
+        self.assertEqual(_raster_height(self.sent), 120 + 165)
+
+    def test_feed_within_one_command_leaves_the_image_alone(self) -> None:
+        client = self._client(dict(M02_PRO), 200)
+        asyncio.run(client.print_images([Image.new("RGB", (576, 120), "white")]))
+
+        self.assertEqual(_feed_amounts(self.sent), [200])
+        self.assertEqual(_raster_height(self.sent), 120)
 
     def test_zero_feed_falls_back_to_the_hardware_default(self) -> None:
         # Zero means "not configured" here, the same convention the energy setting uses.
