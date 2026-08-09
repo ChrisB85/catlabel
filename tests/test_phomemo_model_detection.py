@@ -15,8 +15,15 @@ class PhomemoModelDetectionTests(unittest.TestCase):
     def test_m02_pro_is_not_mistaken_for_the_shorter_m02(self) -> None:
         model = self._identify("M02 Pro")
         self.assertEqual(model["model_id"], "M02_PRO")
-        self.assertEqual(model["width_px"], 624)
+        self.assertEqual(model["width_px"], 576)
         self.assertEqual(model["dpi"], 300)
+
+    def test_m02_pro_head_width_matches_the_measured_hardware(self) -> None:
+        # Measured with a calibration raster: dots past 575 are never printed, so
+        # the head is 576 dots wide. 53 mm is the paper width, not the print width.
+        model = self._identify("M02 Pro")
+        self.assertEqual(model["width_px"], 576)
+        self.assertEqual(model["width_mm"], 48)
 
     def test_m02_pro_without_a_space(self) -> None:
         self.assertEqual(self._identify("M02PRO")["model_id"], "M02_PRO")
