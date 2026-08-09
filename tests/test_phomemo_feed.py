@@ -96,6 +96,35 @@ class PhomemoFeedTests(unittest.TestCase):
 
         self.assertEqual(_feed_amounts(self.sent), [180])
 
+    def test_model_default_outranks_the_global_setting(self) -> None:
+        client = self._client(dict(M02_PRO, default_feed=180), 50)
+        asyncio.run(client.print_images([Image.new("RGB", (576, 8), "white")]))
+
+        self.assertEqual(_feed_amounts(self.sent), [180])
+
+    def test_the_printer_profile_still_wins_over_the_model_default(self) -> None:
+        client = PhomemoClient(
+            SimpleNamespace(address="C4:B8:04:17:B8:97", name="M02 Pro"),
+            dict(M02_PRO, default_feed=180),
+            SimpleNamespace(feed_lines=90, energy=0),
+            SimpleNamespace(energy=0, feed_lines=50),
+        )
+        self.sent = []
+
+        async def capture(data: bytes) -> None:
+            self.sent.append(bytes(data))
+
+        client._send = capture
+        asyncio.run(client.print_images([Image.new("RGB", (576, 8), "white")]))
+
+        self.assertEqual(_feed_amounts(self.sent), [90])
+
+    def test_models_without_a_declared_feed_keep_using_the_global_setting(self) -> None:
+        client = self._client(dict(M02_PRO), 50)
+        asyncio.run(client.print_images([Image.new("RGB", (576, 8), "white")]))
+
+        self.assertEqual(_feed_amounts(self.sent), [50])
+
 
 if __name__ == "__main__":
     unittest.main()

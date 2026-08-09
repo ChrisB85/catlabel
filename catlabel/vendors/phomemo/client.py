@@ -90,10 +90,16 @@ class PhomemoClient(BasePrinterClient):
             )
         )
 
-        hardware_default_feed = int(self.hardware_info.get("default_feed", 32) or 32)
+        # A model that declares its own feed had it measured against that head and
+        # dpi, so it outranks the global setting, which is one number in dots for
+        # every printer. A value set on the printer's own profile still wins.
+        model_feed = self.hardware_info.get("default_feed")
+        hardware_default_feed = int(model_feed or 32)
         resolved_feed = (
             self.printer_profile.feed_lines
             if self.printer_profile and self.printer_profile.feed_lines is not None
+            else model_feed
+            if model_feed
             else (
                 self.settings.feed_lines
                 if getattr(self.settings, "feed_lines", None) is not None

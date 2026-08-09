@@ -25,6 +25,10 @@ class PhomemoModelDetectionTests(unittest.TestCase):
         self.assertEqual(model["width_px"], 576)
         self.assertEqual(model["width_mm"], 48)
 
+    def test_m02_pro_declares_the_measured_tear_feed(self) -> None:
+        # The tear edge sits about 30 mm past the head; 370 dots at 300 dpi clears it.
+        self.assertEqual(self._identify("M02 Pro")["default_feed"], 370)
+
     def test_m02_pro_without_a_space(self) -> None:
         self.assertEqual(self._identify("M02PRO")["model_id"], "M02_PRO")
 

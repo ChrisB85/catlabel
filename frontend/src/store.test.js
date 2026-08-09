@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { useStore } from './store';
+import { settingsForPrinterWidth, useStore } from './store';
 
 afterEach(() => {
   vi.useRealTimers();
@@ -70,5 +70,30 @@ describe('editor store correctness', () => {
     expect(useStore.getState().printCopies).toBe(100);
     expect(useStore.getState().batchRecords).toHaveLength(1_000);
     expect(useStore.getState().pageLayouts[0].pageIndex).toBe(0);
+  });
+});
+
+describe('print width follows the selected printer', () => {
+  const settings = { paper_width_mm: 58, print_width_mm: 48, default_dpi: 203 };
+
+  test('adopts the head width of the selected printer', () => {
+    expect(settingsForPrinterWidth(settings, { width_mm: 110 })).toEqual({ ...settings, print_width_mm: 110 });
+  });
+
+  test('leaves settings alone when the width already matches', () => {
+    expect(settingsForPrinterWidth(settings, { width_mm: 48 })).toBeNull();
+  });
+
+  test('ignores printers that report no usable width', () => {
+    expect(settingsForPrinterWidth(settings, null)).toBeNull();
+    expect(settingsForPrinterWidth(settings, {})).toBeNull();
+    expect(settingsForPrinterWidth(settings, { width_mm: 0 })).toBeNull();
+    expect(settingsForPrinterWidth(settings, { width_mm: 'wide' })).toBeNull();
+  });
+
+  test('keeps every other setting untouched', () => {
+    const result = settingsForPrinterWidth(settings, { width_mm: 48.8 });
+    expect(result.paper_width_mm).toBe(58);
+    expect(result.default_dpi).toBe(203);
   });
 });

@@ -264,6 +264,16 @@ const withHistory = (config) => {
   };
 };
 
+// The stored print width is what the canvas falls back to when no printer is
+// selected, what the settings screen shows, and what the AI is told about, so it
+// follows the hardware once a printer with a known head width is picked.
+export const settingsForPrinterWidth = (settings, info) => {
+  const hardwareWidthMm = Number(info?.width_mm);
+  if (!settings || !Number.isFinite(hardwareWidthMm) || hardwareWidthMm <= 0) return null;
+  if (Math.abs(hardwareWidthMm - Number(settings.print_width_mm)) < 0.01) return null;
+  return { ...settings, print_width_mm: hardwareWidthMm };
+};
+
 export const useStore = create(withHistory((set, get) => ({
   history: [],
   historyIndex: -1,
@@ -1237,6 +1247,11 @@ export const useStore = create(withHistory((set, get) => ({
     if (!mac) {
       set({ printerProfile: { speed: 0, energy: 0, feed_lines: 50, paper_mode: null } });
       return;
+    }
+
+    const settingsForHardware = settingsForPrinterWidth(currentState.settings, info);
+    if (settingsForHardware) {
+      get().updateSettingsAPI(settingsForHardware);
     }
 
     try {

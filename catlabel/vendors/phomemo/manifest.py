@@ -36,7 +36,9 @@ class PhomemoManifest(VendorManifest):
             # 576 dots measured on the hardware: a calibration raster 624 dots wide
             # lost its rightmost marker, one 576 dots wide printed in full, and both
             # came out the same physical width. 53 mm is the paper, not the head.
-            {**base, "name": "M02 Pro", "model_id": "M02_PRO", "width_px": 576, "width_mm": 48, "dpi": 300, "media_type": "continuous", "protocol_family": "phomemo_m02"},
+            # default_feed measured on the hardware: the tear edge sits about 30 mm
+            # past the head, so 370 dots at 300 dpi clears it with a little to spare.
+            {**base, "name": "M02 Pro", "model_id": "M02_PRO", "width_px": 576, "width_mm": 48, "dpi": 300, "media_type": "continuous", "protocol_family": "phomemo_m02", "default_feed": 370},
             {**base, "name": "M03", "model_id": "M03", "width_px": 432, "width_mm": 53, "dpi": 203, "media_type": "continuous", "protocol_family": "phomemo_m"},
             {**base, "name": "M04S / M04AS", "model_id": "M04S", "width_px": 1232, "width_mm": 110, "dpi": 300, "media_type": "continuous", "protocol_family": "phomemo_m04"},
             {**base, "name": "M110 / M120", "model_id": "M110", "width_px": 384, "width_mm": 48, "dpi": 203, "media_type": "continuous", "protocol_family": "phomemo_m110"},
