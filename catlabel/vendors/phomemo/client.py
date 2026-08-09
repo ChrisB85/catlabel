@@ -128,7 +128,8 @@ class PhomemoClient(BasePrinterClient):
                 working_image = self._center_on_print_width(working_image, print_width_px)
 
             logger.info(
-                "Phomemo raster: model=%s protocol=%s head=%dpx dpi=%d source=%dx%d sent=%dx%d",
+                "Phomemo raster: model=%s protocol=%s head=%dpx dpi=%d source=%dx%d sent=%dx%d "
+                "feed=%d dots (profile=%s settings=%s)",
                 self.hardware_info.get("model_id"),
                 protocol,
                 print_width_px,
@@ -137,6 +138,9 @@ class PhomemoClient(BasePrinterClient):
                 source_size[1],
                 working_image.width,
                 working_image.height,
+                feed,
+                getattr(self.printer_profile, "feed_lines", None),
+                getattr(self.settings, "feed_lines", None),
             )
 
             if "tspl" in protocol:

@@ -1,5 +1,5 @@
 name: CatLabel Studio
-version: "0.1.7"
+version: "0.1.8"
 slug: catlabel
 description: Design and print labels on Bluetooth thermal printers
 url: https://github.com/ChrisB85/catlabel
